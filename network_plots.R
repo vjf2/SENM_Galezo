@@ -4,7 +4,7 @@ library(igraph)
 
 options(stringsAsFactors = FALSE)
 
-load("../ai_egos_for_plotting.RData")
+load("data/ai_egos_for_plotting.RData")
 
 lh<-read.delim("../Raw_input_files/LifeHistory_20180507.txt")
 lh<-lh[!duplicated(lh$dolphin_id),]
