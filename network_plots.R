@@ -38,8 +38,8 @@ V(gf)$size<-max(as.numeric(V(gf)$age))-as.numeric(V(gf)$age)
 
 set.seed(3) #not sure if this controls fr algorithm but give it a whirl
 
-# windows()
-pdf(file="../networks.pdf")
+windows()
+# pdf(file="../networks.pdf")
 layout(matrix(c(rep(1, 6), rep(2, 4)), ncol=2, byrow = TRUE))
 par(mar=c(1,1,1,1))
 plot(g,
@@ -52,7 +52,7 @@ plot(g,
      edge.color = adjustcolor("black", alpha.f = 0.4), 
      layout=layout_with_fr(g)
      )
-
+text(x=-1.6, y=0.9, "a", cex=2)
 
 plot(gf,
      vertex.size=degree(gf)+3, 
@@ -64,6 +64,7 @@ plot(gf,
      edge.color = adjustcolor("black", alpha.f = 0.4), 
      layout=layout_with_fr(gf)
      )
+text(x=-2.5, y=1, "b", cex=2)
 dev.off()
 
 
