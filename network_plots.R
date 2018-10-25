@@ -4,9 +4,9 @@ library(igraph)
 
 options(stringsAsFactors = FALSE)
 
-load("ai_egos_for_plotting.RData")
+load("../ai_egos_for_plotting.RData")
 
-lh<-read.delim("Raw_input_files/LifeHistory_20180507.txt")
+lh<-read.delim("../Raw_input_files/LifeHistory_20180507.txt")
 lh<-lh[!duplicated(lh$dolphin_id),]
 
 male<-"AGA" #or try STA
@@ -36,12 +36,10 @@ V(gf)$color[which(V(gf)$name==female)]<-"black"
 V(gf)$age<-substr(lh$birth_date,1,4)[match(V(gf)$name, lh$dolphin_id)]
 V(gf)$size<-max(as.numeric(V(gf)$age))-as.numeric(V(gf)$age)
 
-##Get giant component
-
 set.seed(3) #not sure if this controls fr algorithm but give it a whirl
 
 # windows()
-pdf(file="testnet.pdf")
+pdf(file="../networks.pdf")
 layout(matrix(c(rep(1, 6), rep(2, 4)), ncol=2, byrow = TRUE))
 par(mar=c(1,1,1,1))
 plot(g,
