@@ -25,23 +25,23 @@ source("SENM_helper_functions.R")
 
 #get a cleaned up version of all surveys
 
-survey_general<-read.delim("SurveyGeneral_20180313.txt", header=TRUE, sep="\t")
+survey_general<-read.delim("Raw_input_files/SurveyGeneral_20180313.txt", header=TRUE, sep="\t")
 
-survey_dolphins<-read.delim("SurveyDolphins_20180313.txt", header=TRUE, sep="\t")
+survey_dolphins<-read.delim("Raw_input_files/SurveyDolphins_20180313.txt", header=TRUE, sep="\t")
 
-life_history<-read.delim("LifeHistory_20180507.txt", header=TRUE, sep="\t")
+life_history<-read.delim("Raw_input_files/LifeHistory_20180507.txt", header=TRUE, sep="\t")
 
 #read in update files and graylist
 
 updates<-read.csv("C:/Users/froug/Desktop/MMUDDA Updates/MMUDDA ID updates.csv")
 
-outliers<-read.csv("unverified_outliers.csv")
+outliers<-read.csv("Raw_input_files/unverified_outliers.csv")
 
 #add 2017 data
 
-new_db_dolphins<-read.csv("new_db_dolphins.csv")
-new_db_general<-read.csv("new_db_general.csv")
-gps2017<-read.csv("fall2017waypoints.csv")
+new_db_dolphins<-read.csv("Raw_input_files/new_db_dolphins.csv")
+new_db_general<-read.csv("Raw_input_files/new_db_general.csv")
+gps2017<-read.csv("Raw_input_files/fall2017waypoints.csv")
 
 #merge in survey updates and remove unverified outliers
 {
