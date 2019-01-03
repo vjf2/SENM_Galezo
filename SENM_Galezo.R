@@ -655,6 +655,9 @@ network_metrics<-data.frame(ego=character(nj),
                             ss_strength=numeric(nj),
                             ss_cc=numeric(nj),
                             ss_degree=numeric(nj),
+                            os_strength=numeric(nj),
+                            os_cc=numeric(nj),
+                            os_degree=numeric(nj),
                             close_kin=numeric(nj),
                             known_non_kin=numeric(nj),
                             available_kin=numeric(nj),
@@ -699,6 +702,15 @@ for (i in 1:length(ai_egos)) {
     network_metrics[i, "ss_degree"]<-degree(egss, ego)
     network_metrics[i, "ss_strength"]<-strength(egss, ego)
     network_metrics[i, "ss_cc"]<-transitivity(egss, type="local", vids=ego)
+    
+    #pull out just opposite sex (and ego)
+      
+    opposite_sex_names <- c(ego, V(eg)$name[which(V(eg)$sex!=focal_sex)])
+    egops<-induced_subgraph(eg, vids=V(eg)$name %in% opposite_sex_names)
+      
+    network_metrics[i, "os_degree"]<-degree(egops, ego)
+    network_metrics[i, "os_strength"]<-strength(egops, ego)
+    network_metrics[i, "os_cc"]<-transitivity(egops, type="local", vids=ego)
     
     #assign relatedness to edges, and an unknown number
     
@@ -822,6 +834,9 @@ for (k in 1:length(ai_egos_rand)){
                               ss_strength=numeric(num_sim),
                               ss_cc=numeric(num_sim),
                               ss_degree=numeric(num_sim),
+                              os_strength=numeric(num_sim),
+                              os_cc=numeric(num_sim),
+                              os_degree=numeric(num_sim),
                               close_kin=numeric(num_sim),
                               known_non_kin=numeric(num_sim),
                               available_kin=numeric(num_sim),
@@ -870,6 +885,15 @@ for (k in 1:length(ai_egos_rand)){
     network_metrics[i, "ss_degree"]<-degree(egss, ego)
     network_metrics[i, "ss_strength"]<-strength(egss, ego)
     network_metrics[i, "ss_cc"]<-transitivity(egss, type="local", vids=ego)
+      
+    #pull out just opposite sex (and ego)
+    
+    opposite_sex_names <- c(ego, V(eg)$name[which(V(eg)$sex!=focal_sex)])
+    egops<-induced_subgraph(eg, vids=V(eg)$name %in% opposite_sex_names)
+    
+    network_metrics[i, "os_degree"]<-degree(egops, ego)
+    network_metrics[i, "os_strength"]<-strength(egops, ego)
+    network_metrics[i, "os_cc"]<-transitivity(egops, type="local", vids=ego)
     
     #assign relatedness to edges, and an unknown number
     
