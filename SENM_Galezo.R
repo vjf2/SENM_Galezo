@@ -6,13 +6,13 @@
 library(adehabitatHR)
 library(rgdal)
 library(rgeos)
-library(maptools)
-library(spatstat)
+# library(maptools)
+# library(spatstat)
 library(raster)
 library(parallel)
-library(foreach)
-library(doParallel)
-library(igraph)
+# library(foreach)
+# library(doParallel)
+# library(igraph)
 # library(devtools)
 # install_github("vjf2/SocGen")
 
@@ -260,7 +260,7 @@ fullgrid(udsgdf)<-FALSE #for efficient subsetting
 
 keep<-c("d", "buff_days", "udsgdf", "dolphin_density_per_km", "schedule",
         "dolphins", "xydata3", "coast_polygon", "cmp_fast_random_points",
-        "focal_juvs", "life_history_lookup", "dolphins", "nj")
+        "focal_juvs", "life_history_lookup", "dolphins", "nj", "dates")
 
 rm(list=setdiff(ls(),keep))
 
@@ -333,14 +333,17 @@ mean_group_size<-mean(table(xydata3$observation_id))
 
 #Add date column back to sim surveys
 
-sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) 
+#load("1000juvs.RData")
+
+sim_surveys<-lapply(sim_surveys[1:10], function(i) lapply(1:length(i), function(q) 
 {names(i[[q]])<-c("y", "x", "id")
 i[[q]]$date<-dates[q]
+i[[q]]$groupseen<-groupperday[q]
 return(i[[q]])}))
 
-kfinal<-group_assign(data=sim_surveys, id="id", xcoord ="x", ycoord="y", time="date", group_size = mean_group_size)
+kfinal<-group_assign(data=sim_surveys, id="id", xcoord ="x", ycoord="y", time="date", method="hclust")
 
-random_group_sizes<-lapply(kfinal, function(x) mean(table(x$id)))
+random_group_sizes<-lapply(kfinal, function(x) mean(table(x$observation_id)))
 
 #Create a table of availability dates for focals
 
@@ -353,7 +356,7 @@ names(availability_ego)[1]<-"dolphin_id"
 
 availability_alter<-data.frame(dolphin_id=dolphins)
 availability_alter$entry<-life_history_lookup$birth_date[match(availability_alter$dolphin_id,life_history_lookup$dolphin_id)]+(4*365.25)
-availability_alter$depart<-life_history_lookup$birth_date[match(availability_alter$dolphin_id,life_history_lookup$dolphin_id)]+(10*365.25)
+availability_alter$depart<-life_history_lookup$birth_date[match(availability_alter$dolphin_id,life_history_lookup$dolphin_id)]+(12*365.25)
 
 availability_ego$entry<-as.numeric(availability_ego$entry)
 availability_ego$depart<-as.numeric(availability_ego$depart)
