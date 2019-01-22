@@ -280,7 +280,7 @@ groupperday<-table(xydata3$Date[!duplicated(xydata3$observation_id)])
 
 numdol<-dolperday
 
-num_sim=100 #number of simulations to run
+num_sim=10 #number of simulations to run
 gridrad<-udsgdf@grid@cellsize[1]/2
 
 #Set up cluster for parallelization
@@ -329,66 +329,24 @@ rm(nest_days)
 
 mean_group_size<-mean(table(xydata3$observation_id))
 
-#Group dolphins together using k-means clustering to get same average group size in real data
+#Group dolphins together using hclust clustering to get same average group size in real data
 
-#First use the real data to estimate how many groups we see each day
+#Add date column back to sim surveys
 
-dpd<-sapply(unique(xydata3$Date), function(i) length(xydata3$Date[which(xydata3$Date==i)]))
+sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) 
+{names(i[[q]])<-c("y", "x", "id")
+i[[q]]$date<-dates[q]
+return(i[[q]])}))
 
-gpd<-sapply(unique(xydata3$Date), function(i) length(unique(xydata3$observation_id[which(xydata3$Date==i)])))
-
-prob_per_day<-data.frame(gpd,dpd)
-
-prob_per_day$gs<-prob_per_day$dpd/prob_per_day$gpd
-
-mod<-lm(gpd~dpd, data=prob_per_day)
-
-#Set up cluster to calculate groups, (should take about 35 min for 1000 sims of full data)
-
-bid<-buff_days$id
-
-cl<-makeCluster(detectCores()-1)
-clusterExport(cl, c("sim_surveys", "mod", "bid"))
-starttime<-Sys.time()
-
-kfinal<-pblapply(seq_len(num_sim), FUN=function(w) {
-  single_sim<-sim_surveys[[w]]
-  counter=1
-  each_days_assoc<-lapply(single_sim, function(x1) {
-
-    num_clust<-(mod$coefficients[1]+(nrow(x1)*mod$coefficients[2]))+sample(mod$residuals, 1)
-    num_clust<-ifelse(num_clust>nrow(x1), nrow(x1)-1, num_clust)
-    num_clust<-ifelse(num_clust<1, 1, num_clust)
-    num_clust<-ifelse(nrow(x1[!duplicated(x1[,1:2]),])<num_clust,nrow(x1[!duplicated(x1[,1:2]),]),num_clust)
-    
-    xk<-kmeans(dist(x1[,1:2]),num_clust)
-    # gprox<-mean(xk$centers[xk$cluster])
-    dayAssocK<-data.frame(IDs=x1[,3],Group=as.numeric(xk$cluster))
-    dayAssocK$Permutation<-c(rep(as.character(bid[counter]),nrow(dayAssocK)))
-    dayAssocK$Permutation<-as.Date(dayAssocK$Permutation, format=c("%Y-%m-%d"))
-    counter <<- counter + 1
-    return(dayAssocK)
-  })
-  eda<-do.call("rbind", each_days_assoc)
-  
-  eda$id<-paste0(eda$Permutation,"_",eda$Group)
-  
-  return(eda)
-}, cl=cl)
-
-endtime<-Sys.time()
-
-endtime-starttime #check run time
-
-stopCluster(cl)
+kfinal<-group_assign(data=sim_surveys, id="id", xcoord ="x", ycoord="y", time="date", group_size = mean_group_size)
 
 random_group_sizes<-lapply(kfinal, function(x) mean(table(x$id)))
 
 #Create a table of availability dates for focals
 
 availability_ego<-focal_juvs
-availability_ego$entry<-life_history_lookup$weaning_date[match(availability_ego$juv_id,life_history_lookup$dolphin_id)]
-availability_ego$depart<-life_history_lookup$birth_date[match(availability_ego$juv_id,life_history_lookup$dolphin_id)]+(10*365.25)
+availability_ego$entry<-life_history_lookup$weaning_date[match(availability_ego$juvs,life_history_lookup$dolphin_id)]
+availability_ego$depart<-life_history_lookup$birth_date[match(availability_ego$juvs,life_history_lookup$dolphin_id)]+(10*365.25)
 names(availability_ego)[1]<-"dolphin_id"
 
 #Create a table of availability dates for nonfocals (alters)
@@ -402,9 +360,9 @@ availability_ego$depart<-as.numeric(availability_ego$depart)
 availability_alter$entry<-as.numeric(availability_alter$entry)
 availability_alter$depart<-as.numeric(availability_alter$depart)
 
-xydata3$Date<-as.numeric(xydata3$Date)
+xydata3$Date<-as.numeric(xydata3$Date) #probably can't have this
 
-#Calculate association indices for indiviudals in real data, need
+#Calculate association indices for individuals in real data, need
 ##to calculate the matrix once per focal to allow individuals
 ##to have different availability ranges as egos vs alters
 
