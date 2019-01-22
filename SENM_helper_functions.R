@@ -10,15 +10,15 @@ add_launch<-function(x) {
 }
 
 #fast random points
-fast_random_points<-function(probweights, nd, dc, dgdf) {
-  daily_dolphins<-sample(names(probweights),size=nd,replace=FALSE,prob=probweights)
-  df<-dgdf[,which(colnames(dgdf) %in% daily_dolphins)]
-  df[is.na(df)]<-0
-  cells<-apply(df, 2, function(x) sample(seq_len(nrow(df)),1,prob=x))
-  res<-data.frame(dc[cells,], names(cells))
-}
+# fast_random_points<-function(probweights, nd, dc, dgdf) {
+#   daily_dolphins<-sample(names(probweights),size=nd,replace=FALSE,prob=probweights)
+#   df<-dgdf[,which(colnames(dgdf) %in% daily_dolphins)]
+#   df[is.na(df)]<-0
+#   cells<-apply(df, 2, function(x) sample(seq_len(nrow(df)),1,prob=x))
+#   res<-data.frame(dc[cells,], names(cells))
+# }
 
-cmp_fast_random_points<-cmpfun(fast_random_points)
+# cmp_fast_random_points<-cmpfun(fast_random_points)
 
 
 #This is a speed optimized version to calculate the simple ratio index with a one-day sampling period

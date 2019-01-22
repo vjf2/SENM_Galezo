@@ -24,30 +24,38 @@ source("SENM_helper_functions.R")
 
 all_surveys<-read.csv("clean_all_surveys.csv")
 
+#read and format life history data
+
+life_history<-read.delim("Raw_input_files/LifeHistory_20180507.txt", header=TRUE, sep="\t")
+life_history$birth_date<-as.Date(life_history$birth_date, format="%Y-%m-%d")
+life_history$weaning_date<-as.Date(life_history$weaning_date, format="%Y-%m-%d")
+life_history$death_date<-as.Date(life_history$death_date, format="%Y-%m-%d")
+life_history_lookup<-life_history[!duplicated(life_history$dolphin_id),]
+
 #count up the number of sightings for each individual
 
-all_surveys$sightings<-sapply(all_surveys$dolphin_id, function(i) length(all_surveys$dolphin_id[which(all_surveys$dolphin_id==i)]))
+sightings<-table(all_surveys$dolphin_id)
 
 #Take the subset of surveys for individuals that have at least 15 sightings 
 
-mod_surveys<-all_surveys[all_surveys$sightings>=15,]
+mod_surveys<-all_surveys[all_surveys$dolphin_id %in% names(sightings)[which(sightings>=15)],]
 
 #select focal juveniles 
 #take all surveys from postweaning to age 10
 
 juvs<-mod_surveys$dolphin_id[which(mod_surveys$life_stage=="postweaning" & mod_surveys$age<=10)]
 
-focal_juvs<-data.frame(juv_id=unique(juvs), sightings=numeric(length(unique(juvs))))
-focal_juvs$sightings<-sapply(focal_juvs$juv_id, function(i) length(juvs[which(juvs==i)]))
-focal_juvs$sex<-life_history_lookup$sex[match(focal_juvs$juv_id, life_history_lookup$dolphin_id)]
+focal_juvs<-as.data.frame(table(juvs))
+
+focal_juvs$sex<-life_history_lookup$sex[match(focal_juvs$juvs, life_history_lookup$dolphin_id)]
 
 #get juveniles which ares sexed and have at least 15 sightings as juveniles
 
-focal_juvs<-focal_juvs[which(focal_juvs$sightings>=15
+focal_juvs<-focal_juvs[which(focal_juvs$Freq>=15
                              & focal_juvs$sex!=""),]  
 
 #remove RAB since he died before age 4
-focal_juvs<-focal_juvs[!focal_juvs$juv_id=="RAB",]
+focal_juvs<-focal_juvs[!focal_juvs$juvs=="RAB",]
 
 nj<-nrow(focal_juvs)
 
@@ -180,6 +188,7 @@ mcps<-mcp(daily_xydata[,1], percent=100, unin=c("m"), unout=c("m2"))
 #Add buffer, make sure whole area is covered
 
 buff_days<-gBuffer(mcps, byid=TRUE,width=1000)
+buff_days<-gSimplify(buff_days, tol=50)
 
 #Number of animals in study
 n<-length(unique(xydata3$dolphin_id))
@@ -229,11 +238,13 @@ fast_avail<-fast_avail[,c(1:3)]
 fast_avail$entry<-as.numeric(fast_avail$entry)
 fast_avail$depart<-as.numeric(fast_avail$depart)
 
+numdates<-as.Date(dates, origin="1970-01-01")
+
 alive<-Vectorize(FUN=function(r,c) 
   isTRUE(r>=fast_avail$entry[which(fast_avail$dolphin_id==c)] 
          & r<=fast_avail$depart[which(fast_avail$dolphin_id==c)]))
 
-schedule<-outer(as.numeric(dates), dolphins, FUN=alive) #takes 2 min to run
+schedule<-outer(as.numeric(numdates), dolphins, FUN=alive) #takes 2 min to run
 
 dimnames(schedule)<-matnames
 
@@ -258,28 +269,32 @@ gc()
 # save.image(file="simready.RData")
 # load("simready.RData")
 
-#Calculate number of dolphins seen each day
+#Calculate number of dolphins seen each day and number of groups
 
-areakm<-area(buff_days)/1000000
-numdol<-round(areakm*dolphin_density_per_km)
-numdol<-ifelse(numdol<=1, 2, numdol) 
+dolperday<-table(xydata3$Date)
+groupperday<-table(xydata3$Date[!duplicated(xydata3$observation_id)])
 
+# areakm<-area(buff_days)/1000000
+# numdol<-round(areakm*dolphin_density_per_km)
+# numdol<-ifelse(numdol<=1, 2, numdol) 
 
-num_sim=1000 #number of simulations to run
+numdol<-dolperday
+
+num_sim=100 #number of simulations to run
+gridrad<-udsgdf@grid@cellsize[1]/2
 
 #Set up cluster for parallelization
 #Timing depends on number of cores available
 #7 threads - 1000 sims in 8 hours
-source("SENM_helper_functions.R")
-library(pbapply)
 
 cl<-makeCluster(detectCores()-1)
-clusterEvalQ(cl, library(maptools))
-clusterExport(cl, c("d", "buff_days", "udsgdf", "schedule", "num_sim","cmp_fast_random_points", "numdol"))
+clusterEvalQ(cl, library(sp))
+clusterEvalQ(cl, library(SocGen))
+clusterExport(cl, c("d", "buff_days", "udsgdf", "schedule", "num_sim", "numdol", "gridrad"))
 
 starttime<-Sys.time()
 
-  nest_days<-pblapply(seq_len(d), FUN=function(i){
+  nest_days<-parLapplyLB(cl=cl, seq_len(d), fun=function(i){
     
     bound<-buff_days[i,]
     nd<-numdol[i]
@@ -288,13 +303,14 @@ starttime<-Sys.time()
     probweights<-probweights[names(probweights) %in% colnames(schedule)[schedule[i,]==TRUE]]
     dc<-coordinates(dailygrid)
     dgdf<-dailygrid@data
-    holder<-replicate(num_sim, cmp_fast_random_points(probweights = probweights, 
-                                                  nd=nd, 
+    holder<-replicate(num_sim, fast_random_points(probweights = probweights,
+                                                  nd=nd,
                                                   dc=dc,
-                                                  dgdf=dgdf), 
+                                                  dgdf=dgdf,
+                                                  gridrad=gridrad),
                       simplify=FALSE)
     return(holder)
-  }, cl=cl)
+  })
 
 endtime<-Sys.time()
 
