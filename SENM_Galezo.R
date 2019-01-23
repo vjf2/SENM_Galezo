@@ -235,6 +235,8 @@ fast_avail<-fast_avail[,c(1:3)]
 
 #Give the model a schedule with TRUE/FALSE for each dolphin's avaiability on each survey day
 
+#Can replace with schedulize function eventually
+
 fast_avail$entry<-as.numeric(fast_avail$entry)
 fast_avail$depart<-as.numeric(fast_avail$depart)
 
@@ -363,15 +365,13 @@ availability_ego$depart<-as.numeric(availability_ego$depart)
 availability_alter$entry<-as.numeric(availability_alter$entry)
 availability_alter$depart<-as.numeric(availability_alter$depart)
 
-xydata3$Date<-as.numeric(xydata3$Date) #probably can't have this
-
 #Calculate association indices for individuals in real data, need
 ##to calculate the matrix once per focal to allow individuals
 ##to have different availability ranges as egos vs alters
 
-ai_egos<-list()
+ai_mask<-schedulize(availability_alter, dates=dates, format="mask")
 
-lookup<-as.data.frame(t(combn(dolphins, 2)))
+ai_egos<-list()
 
 for (n in 1:nrow(availability_ego)) {
   
@@ -379,35 +379,22 @@ for (n in 1:nrow(availability_ego)) {
   start<-availability_ego$entry[n]
   end<-availability_ego$depart[n]
   
-  availability_subset<-availability_alter
-  availability_subset$entry[availability_subset$dolphin_id==ego]<-start
-  availability_subset$depart[availability_subset$dolphin_id==ego]<-end
-  
-  lookup$start<-availability_subset$entry[match(lookup[,1],availability_subset$dolphin_id)]
-  lookup$end<-availability_subset$depart[match(lookup[,1],availability_subset$dolphin_id)]
-  lookup$start2<-availability_subset$entry[match(lookup[,2],availability_subset$dolphin_id)]
-  lookup$end2<-availability_subset$depart[match(lookup[,2],availability_subset$dolphin_id)]
-  lookup$hstart<-with(lookup, ifelse(start>start2, start, start2))
-  lookup$hend<-with(lookup, ifelse(end<end2, end, end2))
-  lookup$tp<-with(lookup, hend-hstart)
-  
-  lookup_run<-lookup[which(lookup$tp>1),]
-  
-
   ego_network<-xydata3[xydata3$Date>=start & xydata3$Date<=end,]
-  ego_survey_ids<-ego_network$observation_id[ego_network$dolphin_id==ego]
   
-  alters<-as.character(ego_network$dolphin_id[ego_network$observation_id %in% ego_survey_ids])
+  eid<-unique(ego_network$observation_id[which(ego_network$dolphin_id==ego)])
+  dolls<-unique(ego_network$dolphin_id[which(ego_network$observation_id %in% eid)])
+  ego_network<-ego_network[which(ego_network$dolphin_id %in% dolls),]
   
-  lookup_run_ego<-lookup_run[which(lookup_run$V1 %in% alters & lookup_run$V2 %in% alters),]
+  ego_mask<-ai_mask
   
-  lookup_run_ego<-lookup_run_ego[which(lookup_run_ego$hstart<end & lookup_run_ego$hend>start),]
+  ego_mask[ego,]<-1
   
-  network_ego<-cmp_ai_filtered(sightings=ego_network,
-                               group_variable="observation_id", 
-                               dates="Date", 
-                               IDs="dolphin_id", 
-                               lookup_run_ego=lookup_run_ego)
+  network_ego<-simple_ratio(sightings=ego_network,
+                            group_variable="observation_id", 
+                            dates="Date", 
+                            IDs="dolphin_id", 
+                            symmetric=FALSE, 
+                            mask=ego_mask)
   
   ai_egos[[n]]<-network_ego
   names(ai_egos)[n]<-ego
@@ -418,13 +405,8 @@ real_ai_egos<-ai_egos
 
 save(real_ai_egos, file="real_ai_egos.RData")
 
-#Read in genomic and matrilineal relatedness data files
-
-relatedness<-read.csv("max_likelihood_relatedness.csv")
-kindat_pos<-read.csv("kindat_pos.csv")
-
 #Calculate network metrics for the real data
-
+{
 nj<-length(real_ai_egos)
 
 network_metrics<-data.frame(ego=character(nj), 
@@ -516,6 +498,7 @@ for (i in 1:length(ai_egos)) {
 write.csv(network_metrics, "network_metrics.csv", row.names = FALSE)
 
 real_network_metrics<-read.csv("network_metrics.csv")
+}
 
 #Repeat for the results of the random model
 
