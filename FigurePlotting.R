@@ -3,7 +3,7 @@
 options(stringsAsFactors = FALSE)
 
 #Real data
-real_network_metrics<-read.csv("real_network_metrics.csv", row.names=1)
+real_network_metrics<-read.csv("real_network_metrics.csv")
 real_network_metrics$ss_cc[is.na(real_network_metrics$ss_cc)]<-0
 
 rmixdegree<-aggregate(mixdegree~sex,data=real_network_metrics, mean)
@@ -12,10 +12,9 @@ rmixcc<-aggregate(mixcc~sex,data=real_network_metrics, mean)
 rss_strength<-aggregate(ss_strength~sex,data=real_network_metrics, mean)
 rss_degree<-aggregate(ss_degree~sex,data=real_network_metrics, mean)
 rss_cc<-aggregate(ss_cc~sex,data=real_network_metrics, mean)
-rpck<-aggregate(percent_close_kin~sex, data=real_network_metrics, mean)
 
 #Simulated data
-all_random_metrics<-read.csv("all_random_metrics.csv", row.names = 1)
+all_random_metrics<-read.csv("all_random_metrics.csv")
 all_random_metrics$ss_cc[is.nan(all_random_metrics$ss_cc)]<-0
 
 randmixdegree<-aggregate(mixdegree~sex+iteration,data=all_random_metrics, mean)
@@ -24,7 +23,6 @@ randmixcc<-aggregate(mixcc~sex+iteration,data=all_random_metrics, mean)
 randss_degree<-aggregate(ss_degree~sex+iteration,data=all_random_metrics, mean)
 randss_strength<-aggregate(ss_strength~sex+iteration,data=all_random_metrics, mean)
 randss_cc<-aggregate(ss_cc~sex+iteration,data=all_random_metrics, mean)
-randpck<-aggregate(percent_close_kin~sex+iteration, data=all_random_metrics, mean)
 
 #Plot real data vs simulated data
 
@@ -139,25 +137,6 @@ dev.off()
   
   dev.off()
   }
-
-####Association with Close Kin
-{windows()
-  #pdf(file="rand_percent_close_kin.pdf")
-par(mfrow=c(1,2))
-  
-  hist(randpck$percent_close_kin[which(randpck$sex=="FEMALE")], xlim=c(0,0.6), main="Female Association with Kin",col="grey",
-       border="darkgrey", xlab="Percent of Close Kin Associated With")
-  segments(x0=rpck$percent_close_kin[which(rpck$sex=="FEMALE")], y0=0, y1=par("usr")[4], lty=2, lwd=2, col="darkblue")
-  arrows(x0=rpck$percent_close_kin[which(rpck$sex=="FEMALE")], y0=1, y1=0, length=0.12,
-         lwd=2, col="darkblue")
-  hist(randpck$percent_close_kin[which(randpck$sex=="MALE")], xlim=c(0,0.6), main="Male Association with Kin", col="grey",
-       border="darkgrey", xlab="Percent of Close Kin Associated With", ylab="")
-  segments(x0=rpck$percent_close_kin[which(rpck$sex=="MALE")], y0=0, y1=par("usr")[4], lty=2, lwd=2, col="darkblue")
-  arrows(x0=rpck$percent_close_kin[which(rpck$sex=="MALE")], y0=1, y1=0, length=0.12,
-         lwd=2, col="darkblue")
-  dev.off()
-  }
-
 
 ##Male and Female colors
 
@@ -354,47 +333,6 @@ fcol <- rgb(0, 200, 55, max = 255, alpha = 100, names = "green50")
          lty=3, 
          lwd=2, 
          col="darkblue")
-  dev.off()
-}
-
-####Male vs Female Percent Close Kin
-{
-  pdf(file="Close_Kin.pdf", width=7, height=5)
-  hist(real_network_metrics$percent_close_kin[which(real_network_metrics$sex=="MALE")], 
-       col=mcol, 
-       xlim=c(0,1),
-       ylim=c(0,25), 
-       nclass=8,
-       main="Association With Close Kin", 
-       xlab="Proportion of Ties with Available Close Kin (r > 0.125)", 
-       lty="blank")
-  hist(real_network_metrics$percent_close_kin[which(real_network_metrics$sex=="FEMALE")], 
-       lty="blank", 
-       col=fcol, 
-       nclass=8,
-       add=TRUE)
-  abline(v=rpck$percent_close_kin[which(rpck$sex=="FEMALE")], 
-         lty=2,
-         lwd=2, 
-         col="darkgreen")
-  abline(v=rpck$percent_close_kin[which(rpck$sex=="MALE")], 
-         lty=3, 
-         lwd=2, 
-         col="darkblue")
-  legend(x=0.65,
-         y=24,
-         pch=15,
-         pt.cex=1.25,
-         col=c(mcol, fcol), 
-         bty="n",
-         legend=c("  Male", "  Female"))
-  legend(x=0.63,
-         y=24,
-         lty=c(3,2),
-         col=c("darkblue", "darkgreen"),
-         legend=c(NA, NA),
-         bty="n",
-         lwd=2)
   dev.off()
 }
 

@@ -6,13 +6,11 @@
 library(adehabitatHR)
 library(rgdal)
 library(rgeos)
-# library(maptools)
-# library(spatstat)
 library(raster)
 library(parallel)
-# library(foreach)
-# library(doParallel)
-# library(igraph)
+library(foreach)
+library(doParallel)
+library(igraph)
 # library(devtools)
 # install_github("vjf2/SocGen")
 
@@ -337,7 +335,7 @@ mean_group_size<-mean(table(xydata3$observation_id))
 
 #load("1000juvs.RData")
 
-sim_surveys<-lapply(sim_surveys[1:10], function(i) lapply(1:length(i), function(q) 
+sim_surveys<-lapply(sim_surveys[1:20], function(i) lapply(1:length(i), function(q) 
 {names(i[[q]])<-c("y", "x", "id")
 i[[q]]$date<-dates[q]
 i[[q]]$groupseen<-groupperday[q]
@@ -369,9 +367,12 @@ availability_alter$depart<-as.numeric(availability_alter$depart)
 ##to calculate the matrix once per focal to allow individuals
 ##to have different availability ranges as egos vs alters
 
+xydata3$Date<-as.Date(xydata3$Date, origin="1970-01-01")
+xydata3<-xydata3[order(xydata3$Date),]
+
 ai_mask<-schedulize(availability_alter, dates=dates, format="mask")
 
-ai_egos<-list()
+ai_egos<-vector(mode = "list", nrow(availability_ego))
 
 for (n in 1:nrow(availability_ego)) {
   
@@ -405,8 +406,10 @@ real_ai_egos<-ai_egos
 
 save(real_ai_egos, file="real_ai_egos.RData")
 
+library(igraph)
+
 #Calculate network metrics for the real data
-{
+
 nj<-length(real_ai_egos)
 
 network_metrics<-data.frame(ego=character(nj), 
@@ -419,9 +422,6 @@ network_metrics<-data.frame(ego=character(nj),
                             os_strength=numeric(nj),
                             os_cc=numeric(nj),
                             os_degree=numeric(nj),
-                            close_kin=numeric(nj),
-                            known_non_kin=numeric(nj),
-                            available_kin=numeric(nj),
                             sex=character(nj))
 
 for (i in 1:length(ai_egos)) {
@@ -436,11 +436,6 @@ for (i in 1:length(ai_egos)) {
   m[lower.tri(m)]=t(m)[lower.tri(m)]
   
   m[is.nan(m)]<-0 #if neither was sighted during overlap set to 0
-  
-  #remove inds that are NA for ego (and add ego back in)
-  inds<-sort(c(colnames(m)[which(!is.na(m[ego,]))], ego))
-  
-  m<-m[inds, inds]
   
   g<-graph.adjacency(m, mode="undirected", weighted=TRUE, diag=FALSE)
   
@@ -472,107 +467,60 @@ for (i in 1:length(ai_egos)) {
     network_metrics[i, "os_degree"]<-degree(egops, ego)
     network_metrics[i, "os_strength"]<-strength(egops, ego)
     network_metrics[i, "os_cc"]<-transitivity(egops, type="local", vids=ego)
-    
-    #assign relatedness to edges, and an unknown number
-    
-    seq_edges<-as.numeric(E(eg) [ from(ego) ])
-    
-    edges<-sapply(seq_edges, function(x) V(eg)[inc(x)]$name)
-    el<-as.data.frame(t(edges))
-    
-    el<-merge_pairs(el, relatedness[,c("xID1", "ID2", "relatedness")], 
-                    "V1", "V2", "xID1", "ID2", all.x=TRUE, all.y=FALSE)
-    
-    el<-merge_pairs(el, kindat_pos, "V1", "V2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
-    
-    el$relatedness<-ifelse(is.na(el$relatedness), el$matpedR, el$relatedness)
-    
-    close_kin<-length(na.omit(el$relatedness[el$relatedness>=0.125]))
-    network_metrics[i,"close_kin"]<-close_kin
-    known_non_kin<-length(el$relatedness[!is.na(el$relatedness)])
-    network_metrics[i,"known_non_kin"]<-known_non_kin
-    
   }
 }
 
-write.csv(network_metrics, "network_metrics.csv", row.names = FALSE)
-
-real_network_metrics<-read.csv("network_metrics.csv")
-}
+write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
 #Repeat for the results of the random model
+num_sim=20
 
-#load("kfinal1000.RData")
+#still need to convert ids to character
+kfinal<-lapply(kfinal, function(x) {x[,"id"]<-as.character(x[,"id"]);x})
 
-#Format the columns for faster and more consistent subsetting
-
-kfinal<-lapply(kfinal, function(x) {names(x)<-c("dolphin_id", "DayGroup", "Date", "observation_id");x})
-kfinal<-lapply(kfinal, function(x) {x[,"observation_id"]<-as.numeric(as.factor(x[,"observation_id"]));x})
-kfinal<-lapply(kfinal, function(x) {x[,"Date"]<-as.numeric(x[,"Date"]);x})
-kfinal<-lapply(kfinal, function(x) {x[,"dolphin_id"]<-as.character(x[,"dolphin_id"]);x})
-
-lookup<-as.data.frame(t(combn(dolphins, 2)))
-
-#Set up a cluster to run in parallel
-#This is the longest section, it may take up to 8 hours on a laptop
-
-cl<-makeCluster(detectCores()-1)
-clusterExport(cl, c("kfinal", "availability_ego", "availability_alter", "cmp_ai_filtered"))
-registerDoParallel(cl)
+library(foreach)
+library(doParallel)
 
 starttime<-Sys.time()
 
-ai_egos_rand<-foreach (n=1:nrow(availability_ego), .errorhandling = "pass") %dopar% {
+cl<-makeCluster(detectCores()-1, outfile="kfinal2ai_egos_rand.txt")
+clusterEvalQ(cl, library(SocGen))
+clusterExport(cl, c("kfinal", "availability_ego", "ai_mask", "num_sim"))
+registerDoParallel(cl)
+
+ai_egos_rand<-foreach (n=1:nrow(availability_ego), .errorhandling='stop') %do% {
   
   ego<-as.character(availability_ego$dolphin_id[n])
   start<-availability_ego$entry[n]
   end<-availability_ego$depart[n]
   
-  availability_subset<-availability_alter
-  availability_subset$entry[availability_subset$dolphin_id==ego]<-start
-  availability_subset$depart[availability_subset$dolphin_id==ego]<-end
+  ego_mask<-ai_mask
   
-  lookup$start<-availability_subset$entry[match(lookup[,1],availability_subset$dolphin_id)]
-  lookup$end<-availability_subset$depart[match(lookup[,1],availability_subset$dolphin_id)]
-  lookup$start2<-availability_subset$entry[match(lookup[,2],availability_subset$dolphin_id)]
-  lookup$end2<-availability_subset$depart[match(lookup[,2],availability_subset$dolphin_id)]
-  lookup$hstart<-with(lookup, ifelse(start>start2, start, start2))
-  lookup$hend<-with(lookup, ifelse(end<end2, end, end2))
-  lookup$tp<-with(lookup, hend-hstart)
+  ego_mask[ego,]<-1
   
-  lookup_run<-lookup[which(lookup$tp>1),]
-  ai_egos<-list()
+  ego_sims<-vector(mode = "list", num_sim)
   
   for (j in 1:num_sim) {
     
-    
     random1<-kfinal[[j]]
-    ego_network<-random1[random1$Date>=start & random1$Date<=end,]
-    ego_survey_ids<-ego_network$observation_id[ego_network$dolphin_id==ego]
+    ego_network<-random1[random1$date>=start & random1$date<=end,]
+    eid<-unique(ego_network$observation_id[which(ego_network$id==ego)])
+    dolls<-unique(ego_network$id[which(ego_network$observation_id %in% eid)])
+    ego_network<-ego_network[which(ego_network$id %in% dolls),]
     
-    alters<-as.character(ego_network$dolphin_id[ego_network$observation_id %in% ego_survey_ids])
     
-    lookup_run_ego<-lookup_run[which(lookup_run$V1 %in% alters & lookup_run$V2 %in% alters),]
+    network_ego<-simple_ratio(sightings=ego_network,
+                              group_variable="observation_id", 
+                              dates="date", 
+                              IDs="id", 
+                              symmetric=FALSE, 
+                              mask=ego_mask)
     
-    lookup_run_ego<-lookup_run_ego[which(lookup_run_ego$hstart<end & lookup_run_ego$hend>start),]
-    
-    if(nrow(lookup_run_ego)==0) {ai_egos[[j]]<-NA
-      next}
-    
-    network_ego<-cmp_ai_filtered(sightings=ego_network,
-                                 group_variable="observation_id", 
-                                 dates="Date", 
-                                 IDs="dolphin_id", 
-                                 lookup_run_ego=lookup_run_ego)
-    
-    ai_egos[[j]]<-network_ego
-    
+    ego_sims[[j]]<-network_ego
   }
-   
-  ai_egos
-  
+  cat(paste0(n, " networks complete for ", ego, "\n"))
+  ego_sims
 }
-
 
 stopCluster(cl)
 endtime<-Sys.time()
@@ -599,9 +547,6 @@ for (k in 1:length(ai_egos_rand)){
                               os_strength=numeric(num_sim),
                               os_cc=numeric(num_sim),
                               os_degree=numeric(num_sim),
-                              close_kin=numeric(num_sim),
-                              known_non_kin=numeric(num_sim),
-                              available_kin=numeric(num_sim),
                               sex=character(num_sim),
                               iteration=numeric(num_sim))
   
@@ -656,26 +601,7 @@ for (k in 1:length(ai_egos_rand)){
     network_metrics[i, "os_degree"]<-degree(egops, ego)
     network_metrics[i, "os_strength"]<-strength(egops, ego)
     network_metrics[i, "os_cc"]<-transitivity(egops, type="local", vids=ego)
-    
-    #assign relatedness to edges, and an unknown number
-    
-    seq_edges<-as.numeric(E(eg) [ from(ego) ])
-    
-    edges<-sapply(seq_edges, function(x) V(eg)[inc(x)]$name)
-    el<-as.data.frame(t(edges))
-    
-    el<-merge_pairs(el, relatedness[,c("xID1", "ID2", "relatedness")], 
-                    "V1", "V2", "xID1", "ID2", all.x=TRUE, all.y=FALSE)
-    
-    el<-merge_pairs(el, kindat_pos, "V1", "V2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
-    
-    el$relatedness<-ifelse(is.na(el$relatedness), el$matpedR, el$relatedness)
-    
-    close_kin<-length(na.omit(el$relatedness[el$relatedness>=0.125]))
-    network_metrics[i,"close_kin"]<-close_kin
-    known_non_kin<-length(el$relatedness[!is.na(el$relatedness)])
-    network_metrics[i,"known_non_kin"]<-known_non_kin
-    
+
     }
 }
 
@@ -686,67 +612,7 @@ for (k in 1:length(ai_egos_rand)){
 
 all_random_metrics<-do.call("rbind", random_network_metrics)
 
-write.csv(all_random_metrics, "all_random_metrics_kmeanswJUI.csv", row.names = FALSE)
-
-#Calculate available kin in population, available non-kin, and available individuals of unknown relatedness
-
-focals<-availability_ego[,"dolphin_id"]
-alters<-availability_alter[,"dolphin_id"]
-
-###change to rlookup
-
-rlookup<-data.frame(Var1=rep(focals, each=length(alters)), Var2=rep(alters, length(focals)))
-#remove self pairs
-
-rlookup[,2]<-ifelse(rlookup[,1]==rlookup[,2], NA, rlookup[,2])
-rlookup<-rlookup[complete.cases(rlookup),]
-
-rlookup$start<-availability_ego$entry[match(rlookup[,1],availability_ego$dolphin_id)]
-rlookup$end<-availability_ego$depart[match(rlookup[,1],availability_ego$dolphin_id)]
-rlookup$start2<-availability_alter$entry[match(rlookup[,2],availability_alter$dolphin_id)]
-rlookup$end2<-availability_alter$depart[match(rlookup[,2],availability_alter$dolphin_id)]
-rlookup$hstart<-as.Date(with(rlookup, ifelse(start>start2, start, start2)),origin="1970-01-01")
-rlookup$hend<-as.Date(with(rlookup, ifelse(end<end2, end, end2)),origin="1970-01-01")
-rlookup$tp<-with(rlookup, hend-hstart)
-
-rlookup_run<-rlookup[which(rlookup$tp>1),]
-
-#Add relatedness data to list of all possible pairs
-
-akin<-merge_pairs(rlookup_run[,c("Var1", "Var2", "tp")], relatedness[,c("xID1", "ID2", "relatedness")], "Var1", "Var2", "xID1", "ID2", all.x=TRUE, all.y=FALSE)
-
-akin<-merge_pairs(akin, kindat_pos, "Var1", "Var2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
-
-akin$relatedness<-ifelse(is.na(akin$relatedness), akin$matpedR, akin$relatedness)
-
-dolphs<-split(akin, akin$Var1)
-
-available_close_kin<-unlist(lapply(dolphs, function (x) length(na.omit(x$relatedness[x$relatedness>=0.125]))))
-
-available_non_kin<-unlist(lapply(dolphs, function (x) length(na.omit(x$relatedness[x$relatedness<0.125]))))
-
-available_unknown<-unlist(lapply(dolphs, function (x) length(x$relatedness[is.na(x$relatedness)])))
-
-#Add available kin to real data
-
-real_network_metrics$available_kin<-available_close_kin[match(real_network_metrics$ego, names(available_close_kin))]
-real_network_metrics$available_non_kin<-available_non_kin[match(real_network_metrics$ego, names(available_non_kin))]
-real_network_metrics$available_unknown<-available_unknown[match(real_network_metrics$ego, names(available_unknown))]
-
-real_network_metrics$percent_close_kin<-real_network_metrics$close_kin/real_network_metrics$available_kin
-
-#Add available kin to random data as well 
-
-all_random_metrics$available_kin<-real_network_metrics$available_kin[match(all_random_metrics$ego, real_network_metrics$ego)]
-all_random_metrics$available_non_kin<-real_network_metrics$available_non_kin[match(all_random_metrics$ego, real_network_metrics$ego)]
-all_random_metrics$available_unknown<-real_network_metrics$available_unknown[match(all_random_metrics$ego, real_network_metrics$ego)]
-
-all_random_metrics$percent_close_kin<-all_random_metrics$close_kin/all_random_metrics$available_kin
-
-#write out updated network files
-
-write.csv(real_network_metrics, "real_network_metrics.csv")
-write.csv(all_random_metrics, "all_random_metrics.csv")
+write.csv(all_random_metrics, "all_random_metrics.csv", row.names = FALSE)
 
 ####See Figure Plotting for figures and aggregating results
 
