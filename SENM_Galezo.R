@@ -166,14 +166,17 @@ groupings<-unique(xydata3[,c("Date", "observation_id", "X", "Y")])
 
 days<-split(groupings, groupings$Date)
 
-#add launch to each days surveys (4 so that each day has a least 5 points)
+#add a set of launch site locations to each days surveys (4 so that each day has a least 5 points)
 
 launch<-data.frame(Date=as.Date(rep("2001-01-01",4)),
                    observation_id=rep("launch",4),
                    X=rep(122241,4),
                    Y=seq(11963,11966,1))
 
-days1<-lapply(days, function(x) add_launch(x)) ##add launch in digidolph helper functions
+days1<-lapply(days, function(x) {
+                launch[1]<-x[1,1]
+                x<-rbind(x, launch)
+                return(x)}) 
 
 survey_days<-as.data.frame(do.call("rbind", days1))
 
@@ -280,7 +283,7 @@ groupperday<-table(xydata3$Date[!duplicated(xydata3$observation_id)])
 
 numdol<-dolperday
 
-num_sim=10 #number of simulations to run
+num_sim=1000 #number of simulations to run
 gridrad<-udsgdf@grid@cellsize[1]/2
 
 #Set up cluster for parallelization
@@ -335,7 +338,7 @@ mean_group_size<-mean(table(xydata3$observation_id))
 
 #load("1000juvs.RData")
 
-sim_surveys<-lapply(sim_surveys[1:20], function(i) lapply(1:length(i), function(q) 
+sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) 
 {names(i[[q]])<-c("y", "x", "id")
 i[[q]]$date<-dates[q]
 i[[q]]$groupseen<-groupperday[q]
@@ -357,11 +360,6 @@ names(availability_ego)[1]<-"dolphin_id"
 availability_alter<-data.frame(dolphin_id=dolphins)
 availability_alter$entry<-life_history_lookup$birth_date[match(availability_alter$dolphin_id,life_history_lookup$dolphin_id)]+(4*365.25)
 availability_alter$depart<-life_history_lookup$birth_date[match(availability_alter$dolphin_id,life_history_lookup$dolphin_id)]+(12*365.25)
-
-availability_ego$entry<-as.numeric(availability_ego$entry)
-availability_ego$depart<-as.numeric(availability_ego$depart)
-availability_alter$entry<-as.numeric(availability_alter$entry)
-availability_alter$depart<-as.numeric(availability_alter$depart)
 
 #Calculate association indices for individuals in real data, need
 ##to calculate the matrix once per focal to allow individuals
@@ -473,7 +471,7 @@ for (i in 1:length(ai_egos)) {
 write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
 #Repeat for the results of the random model
-num_sim=20
+num_sim=1000
 
 #still need to convert ids to character
 kfinal<-lapply(kfinal, function(x) {x[,"id"]<-as.character(x[,"id"]);x})
@@ -488,7 +486,7 @@ clusterEvalQ(cl, library(SocGen))
 clusterExport(cl, c("kfinal", "availability_ego", "ai_mask", "num_sim"))
 registerDoParallel(cl)
 
-ai_egos_rand<-foreach (n=1:nrow(availability_ego), .errorhandling='stop') %do% {
+ai_egos_rand<-foreach (n=1:nrow(availability_ego), .errorhandling='pass') %dopar% {
   
   ego<-as.character(availability_ego$dolphin_id[n])
   start<-availability_ego$entry[n]
