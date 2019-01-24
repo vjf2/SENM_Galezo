@@ -18,8 +18,6 @@ library(SocGen)
 
 options(stringsAsFactors = FALSE)
 
-source("SENM_helper_functions.R")
-
 all_surveys<-read.csv("clean_all_surveys.csv")
 
 #read and format life history data
@@ -236,34 +234,18 @@ fast_avail<-fast_avail[,c(1:3)]
 
 #Give the model a schedule with TRUE/FALSE for each dolphin's avaiability on each survey day
 
-#Can replace with schedulize function eventually
-
-fast_avail$entry<-as.numeric(fast_avail$entry)
-fast_avail$depart<-as.numeric(fast_avail$depart)
-
-numdates<-as.Date(dates, origin="1970-01-01")
-
-alive<-Vectorize(FUN=function(r,c) 
-  isTRUE(r>=fast_avail$entry[which(fast_avail$dolphin_id==c)] 
-         & r<=fast_avail$depart[which(fast_avail$dolphin_id==c)]))
-
-schedule<-outer(as.numeric(numdates), dolphins, FUN=alive) #takes 2 min to run
-
-dimnames(schedule)<-matnames
+schedule<-schedulize(fast_avail, id="dolphin_id", start="entry", end="depart", 
+                     dates=dates, format="sim")
 
 dolphin_density_per_km<-dim(xydata3)[1]/(sum(area(buff_days))/1000000)
 
-#Now run the model, first we'll make a list of simulated allsurveys
-#I would run ~3 simulations, fit the gprox, then go back and run a full set
-#Note it takes about 4 minutes to run one full 30-year simulation
-
-fullgrid(udsgdf)<-FALSE #for efficient subsetting
+fullgrid(udsgdf)<-FALSE #convert to SpatialPixels for more efficient subsetting
 
 #cleanup environment
 
-keep<-c("d", "buff_days", "udsgdf", "dolphin_density_per_km", "schedule",
-        "dolphins", "xydata3", "coast_polygon", "cmp_fast_random_points",
-        "focal_juvs", "life_history_lookup", "dolphins", "nj", "dates")
+keep<-c("d", "buff_days", "udsgdf", "schedule",
+        "dolphins", "xydata3", "coast_polygon","focal_juvs", 
+        "life_history_lookup", "dolphins", "nj", "dates")
 
 rm(list=setdiff(ls(),keep))
 
@@ -272,16 +254,11 @@ gc()
 # save.image(file="simready.RData")
 # load("simready.RData")
 
-#Calculate number of dolphins seen each day and number of groups
-
-dolperday<-table(xydata3$Date)
-groupperday<-table(xydata3$Date[!duplicated(xydata3$observation_id)])
-
 # areakm<-area(buff_days)/1000000
 # numdol<-round(areakm*dolphin_density_per_km)
 # numdol<-ifelse(numdol<=1, 2, numdol) 
 
-numdol<-dolperday
+numdol<-c(table(xydata3$Date))
 
 num_sim=1000 #number of simulations to run
 gridrad<-udsgdf@grid@cellsize[1]/2
@@ -338,13 +315,16 @@ mean_group_size<-mean(table(xydata3$observation_id))
 
 #load("1000juvs.RData")
 
-sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) 
-{names(i[[q]])<-c("y", "x", "id")
-i[[q]]$date<-dates[q]
-i[[q]]$groupseen<-groupperday[q]
-return(i[[q]])}))
+#Calculate number of dolphins seen each day and number of groups
 
-kfinal<-group_assign(data=sim_surveys, id="id", xcoord ="x", ycoord="y", time="date", method="hclust")
+groupperday<-table(xydata3$Date[!duplicated(xydata3$observation_id)])
+
+sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) {
+  names(i[[q]])<-c("y", "x", "id")
+  return(i[[q]])}))
+
+kfinal<-group_assign(data=sim_surveys[1:10], id="id", xcoord ="x", ycoord="y",
+                     time = names(groupperday),group_vector=groupperday, method="hclust")
 
 random_group_sizes<-lapply(kfinal, function(x) mean(table(x$observation_id)))
 
@@ -471,71 +451,35 @@ for (i in 1:length(ai_egos)) {
 write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
 #Repeat for the results of the random model
-num_sim=1000
 
 #still need to convert ids to character
-kfinal<-lapply(kfinal, function(x) {x[,"id"]<-as.character(x[,"id"]);x})
+# kfinal<-lapply(kfinal, function(x) {x[,"id"]<-as.character(x[,"id"]);x})
 
 library(foreach)
 library(doParallel)
 
+date_lookup<-sort(xydata3$Date)
+
 starttime<-Sys.time()
 
-cl<-makeCluster(detectCores()-1, outfile="kfinal2ai_egos_rand.txt")
-clusterEvalQ(cl, library(SocGen))
-clusterExport(cl, c("kfinal", "availability_ego", "ai_mask", "num_sim"))
+cl<-makeCluster(detectCores()-1, outfile="../ids_completed.txt")
+clusterEvalQ(cl, {library(SocGen); library(igraph)})
+clusterExport(cl, c("kfinal", "availability_ego", "ai_mask", "date_lookup", "life_history_lookup"))
 registerDoParallel(cl)
 
-ai_egos_rand<-foreach (n=1:nrow(availability_ego), .errorhandling='pass') %dopar% {
+random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pass') %dopar% {
   
   ego<-as.character(availability_ego$dolphin_id[n])
   start<-availability_ego$entry[n]
   end<-availability_ego$depart[n]
-  
+  ego_sex<-life_history_lookup$sex[match(ego, life_history_lookup$dolphin_id)]
   ego_mask<-ai_mask
   
   ego_mask[ego,]<-1
   
-  ego_sims<-vector(mode = "list", num_sim)
+  num_sim=length(kfinal)
   
-  for (j in 1:num_sim) {
-    
-    random1<-kfinal[[j]]
-    ego_network<-random1[random1$date>=start & random1$date<=end,]
-    eid<-unique(ego_network$observation_id[which(ego_network$id==ego)])
-    dolls<-unique(ego_network$id[which(ego_network$observation_id %in% eid)])
-    ego_network<-ego_network[which(ego_network$id %in% dolls),]
-    
-    
-    network_ego<-simple_ratio(sightings=ego_network,
-                              group_variable="observation_id", 
-                              dates="date", 
-                              IDs="id", 
-                              symmetric=FALSE, 
-                              mask=ego_mask)
-    
-    ego_sims[[j]]<-network_ego
-  }
-  cat(paste0(n, " networks complete for ", ego, "\n"))
-  ego_sims
-}
-
-stopCluster(cl)
-endtime<-Sys.time()
-
-endtime-starttime #check run time
-
-names(ai_egos_rand)<-availability_ego$dolphin_id
-
-save(ai_egos_rand, file="ai_egos_rand.RData")
-
-#Calculate network metrics for the random data
-
-random_network_metrics<-list()
-
-for (k in 1:length(ai_egos_rand)){
-  
-  network_metrics<-data.frame(ego=character(num_sim), 
+  network_metrics<-data.frame(ego=rep(ego, num_sim), 
                               mixstrength=numeric(num_sim),
                               mixdegree=numeric(num_sim),
                               mixcc=numeric(num_sim),
@@ -545,68 +489,69 @@ for (k in 1:length(ai_egos_rand)){
                               os_strength=numeric(num_sim),
                               os_cc=numeric(num_sim),
                               os_degree=numeric(num_sim),
-                              sex=character(num_sim),
-                              iteration=numeric(num_sim))
+                              sex=rep(ego_sex, num_sim),
+                              iteration=1:num_sim)
   
-  ai_egos1<-ai_egos_rand[[k]]
-
-    for (i in 1:length(ai_egos1)) {
+  for (j in 1:num_sim) {
     
-    ego<-names(ai_egos_rand[k])
-    network_metrics[i,"ego"]<-ego
-    focal_sex<-life_history_lookup$sex[match(ego, life_history_lookup$dolphin_id)]
-    network_metrics[i,"sex"]<-focal_sex
-    network_metrics[i,"iteration"]<-i
+    random1<-kfinal[[j]]
+    ego_network<-random1[which(date_lookup>=start & date_lookup<=end),]
+    ego_network$dates<-date_lookup[which(date_lookup>=start & date_lookup<=end)]
+    eid<-unique(ego_network$group[which(ego_network$id==ego)])
+    dolls<-unique(ego_network$id[which(ego_network$group %in% eid)])
+    ego_network<-ego_network[which(ego_network$id %in% dolls),]
     
-    m<-as.matrix(ai_egos1[[i]])
-    m[lower.tri(m)]=t(m)[lower.tri(m)]
-    m[is.nan(m)]<-0 #if neither was sighted during overlap set to 0
+    network_ego<-simple_ratio(sightings=ego_network,
+                              group_variable="group", 
+                              dates="dates", 
+                              IDs="id", 
+                              symmetric=TRUE, 
+                              mask=ego_mask)
     
-    if(all(is.na(m))){next}
+    if(!is.matrix(network_ego)){next}
     
-    #remove inds that are NA for ego (and add ego back in)
-    inds<-sort(c(colnames(m)[which(!is.na(m[ego,]))], ego))
-    
-    m<-m[inds, inds]
-    
-    g<-graph.adjacency(m, mode="undirected", weighted=TRUE, diag=FALSE)
+    g<-graph.adjacency(network_ego, mode="undirected", weighted=TRUE, diag=FALSE)
     
     eg<-make_ego_graph(g, order=1, nodes=ego)[[1]] #is a list, return element 1
     
     if(length(E(eg))==0){next} else{
       
-    #add sexes of individuals
-    
-    V(eg)$sex<-life_history_lookup$sex[match(V(eg)$name, life_history_lookup$dolphin_id)]
-    
-    network_metrics[i, "mixdegree"]<-degree(eg, ego)
-    network_metrics[i, "mixstrength"]<-strength(eg, ego)
-    network_metrics[i, "mixcc"]<-transitivity(eg, type="local", vids=ego)
-    
-    #pull out just same sex
-    
-    egss<-induced_subgraph(eg, vids=V(eg)$name[which(V(eg)$sex==focal_sex)])
-    
-    network_metrics[i, "ss_degree"]<-degree(egss, ego)
-    network_metrics[i, "ss_strength"]<-strength(egss, ego)
-    network_metrics[i, "ss_cc"]<-transitivity(egss, type="local", vids=ego)
+      #add sexes of individuals
       
-    #pull out just opposite sex (and ego)
-    
-    opposite_sex_names <- c(ego, V(eg)$name[which(V(eg)$sex!=focal_sex)])
-    egops<-induced_subgraph(eg, vids=V(eg)$name %in% opposite_sex_names)
-    
-    network_metrics[i, "os_degree"]<-degree(egops, ego)
-    network_metrics[i, "os_strength"]<-strength(egops, ego)
-    network_metrics[i, "os_cc"]<-transitivity(egops, type="local", vids=ego)
-
+      V(eg)$sex<-life_history_lookup$sex[match(V(eg)$name, life_history_lookup$dolphin_id)]
+      
+      network_metrics[j, "mixdegree"]<-degree(eg, ego)
+      network_metrics[j, "mixstrength"]<-strength(eg, ego)
+      network_metrics[j, "mixcc"]<-transitivity(eg, type="local", vids=ego)
+      
+      #pull out just same sex
+      
+      egss<-induced_subgraph(eg, vids=V(eg)$name[which(V(eg)$sex==ego_sex)])
+      
+      network_metrics[j, "ss_degree"]<-degree(egss, ego)
+      network_metrics[j, "ss_strength"]<-strength(egss, ego)
+      network_metrics[j, "ss_cc"]<-transitivity(egss, type="local", vids=ego)
+      
+      #pull out just opposite sex (and ego)
+      
+      opposite_sex_names <- c(ego, V(eg)$name[which(V(eg)$sex!=ego_sex)])
+      egops<-induced_subgraph(eg, vids=V(eg)$name %in% opposite_sex_names)
+      
+      network_metrics[j, "os_degree"]<-degree(egops, ego)
+      network_metrics[j, "os_strength"]<-strength(egops, ego)
+      network_metrics[j, "os_cc"]<-transitivity(egops, type="local", vids=ego)
+      # ego_sims[[j]]<-network_ego
     }
+    
+  }
+  cat(paste0(n, " networks complete for ", ego, "\n"))
+  network_metrics
 }
 
-  random_network_metrics[[k]]<-network_metrics
-  cat(k)
-  
-}
+stopCluster(cl)
+endtime<-Sys.time()
+
+endtime-starttime #check run time
 
 all_random_metrics<-do.call("rbind", random_network_metrics)
 
