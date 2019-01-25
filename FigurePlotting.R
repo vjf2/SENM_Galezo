@@ -31,14 +31,14 @@ randss_cc<-aggregate(ss_cc~sex+iteration,data=all_random_metrics, mean)
 windows()
   #pdf(file="rand_degree.pdf")
 par(mfrow=c(2,2), mar=c(4.1, 4.1, 3.1, 1.1))
-hist(randmixdegree$mixdegree[which(randmixdegree$sex=="FEMALE")], xlim=c(15,30), main="Female Degree", xlab="", col="grey",
+hist(randmixdegree$mixdegree[which(randmixdegree$sex=="FEMALE")], xlim=c(20,40), main="Female Degree", xlab="", col="grey",
      border="darkgrey")  
 
 segments(x0=rmixdegree$mixdegree[which(rmixdegree$sex=="FEMALE")], y0=0, y1=par("usr")[4], lty=2, lwd=2, col="darkblue")
 arrows(x0=rmixdegree$mixdegree[which(rmixdegree$sex=="FEMALE")], y0=1, y1=0, length=0.12,
        lwd=2, col="darkblue")
 
-hist(randmixdegree$mixdegree[which(randmixdegree$sex=="MALE")], xlim=c(15,30), main="Male Degree", xlab="", col="grey",
+hist(randmixdegree$mixdegree[which(randmixdegree$sex=="MALE")], xlim=c(20,40), main="Male Degree", xlab="", col="grey",
      border="darkgrey", ylab="")  
 
 segments(x0=rmixdegree$mixdegree[which(rmixdegree$sex=="MALE")], y0=0, y1=par("usr")[4], lty=2, lwd=2, col="darkblue")
@@ -46,7 +46,7 @@ arrows(x0=rmixdegree$mixdegree[which(rmixdegree$sex=="MALE")], y0=1, y1=0, lengt
        lwd=2, col="darkblue")
 
 
-hist(randss_degree$ss_degree[which(randss_degree$sex=="FEMALE")], xlim=c(5,16), main="Female Same Sex Degree", xlab="Number of Associates",
+hist(randss_degree$ss_degree[which(randss_degree$sex=="FEMALE")], xlim=c(8,20), main="Female Same Sex Degree", xlab="Number of Associates",
      col="grey",
      border="darkgrey")  
 
@@ -54,7 +54,7 @@ segments(x0=rss_degree$ss_degree[which(rss_degree$sex=="FEMALE")], y0=0, y1=par(
 arrows(x0=rss_degree$ss_degree[which(rss_degree$sex=="FEMALE")], y0=1, y1=0, length=0.12,
        lwd=2, col="darkblue")
 
-hist(randss_degree$ss_degree[which(randss_degree$sex=="MALE")], xlim=c(5,16), main="Male Same Sex Degree", xlab="Number of Associates",
+hist(randss_degree$ss_degree[which(randss_degree$sex=="MALE")], xlim=c(8,20), main="Male Same Sex Degree", xlab="Number of Associates",
      col="grey",
      border="darkgrey", ylab="")  
 segments(x0=rss_degree$ss_degree[which(rss_degree$sex=="MALE")], y0=0, y1=par("usr")[4], lty=2, lwd=2, col="darkblue")

@@ -200,8 +200,6 @@ dates<-sort(unique(xydata3$Date))
 
 dolphins<-sort(unique(xydata3$dolphin_id))
 
-matnames<-list(as.character(dates),dolphins)
-
 ##create availability list of all individuals 
 
 fast_avail<-data.frame(dolphin_id=dolphins, entry=rep(NA, length(dolphins)), depart=rep(NA, length(dolphins)))

@@ -4,16 +4,16 @@ library(igraph)
 
 options(stringsAsFactors = FALSE)
 
-load("data/ai_egos_for_plotting.RData")
+load("real_ai_egos.RData")
 
-lh<-read.delim("../Raw_input_files/LifeHistory_20180507.txt")
+lh<-read.delim("Raw_input_files/LifeHistory_20180507.txt")
 lh<-lh[!duplicated(lh$dolphin_id),]
 
 male<-"AGA" #or try STA
-female<-"SQL" #or try CAB KIY SHO
+female<-"SHO" #or try CAB KIY SHO SQL
 
-male_ego<-ai_egos[[male]] 
-female_ego<-ai_egos[[female]] 
+male_ego<-real_ai_egos[[male]] 
+female_ego<-real_ai_egos[[female]] 
 
 male_ego[is.na(male_ego)]<-0
 female_ego[is.na(female_ego)]<-0
@@ -25,46 +25,68 @@ g<-make_ego_graph(g, order=1, nodes=male)[[1]] #is a list, return element 1
 gf<-make_ego_graph(gf, order=1, nodes=female)[[1]] 
 
 V(g)$sex<-lh$sex[match(V(g)$name,lh$dolphin_id)]
-V(g)$color<-ifelse(V(g)$sex=="MALE", "blue", "red")
+V(g)$color<-ifelse(V(g)$sex=="MALE", "blue3", "red3")
 V(g)$color[which(V(g)$name==male)]<-"black"
 V(g)$age<-substr(lh$birth_date,1,4)[match(V(g)$name, lh$dolphin_id)]
 V(g)$size<-max(as.numeric(V(g)$age))-as.numeric(V(g)$age)
+V(g)$shape<-ifelse(V(g)$sex=="MALE", "square", "circle")
+
+set.seed(7)  #to get same network layout
+
+minC <- rep(-Inf, vcount(g))
+maxC <- rep(Inf, vcount(g))
+minC[which(V(g)$name==male)]<-maxC[which(V(g)$name==male)]<-0
+male_layout <- layout_with_fr(g, minx=minC, maxx=maxC,
+                     miny=minC, maxy=maxC)
 
 V(gf)$sex<-lh$sex[match(V(gf)$name,lh$dolphin_id)]
-V(gf)$color<-ifelse(V(gf)$sex=="MALE", "blue", "red")
+V(gf)$color<-ifelse(V(gf)$sex=="MALE", "blue3", "red3")
 V(gf)$color[which(V(gf)$name==female)]<-"black"
 V(gf)$age<-substr(lh$birth_date,1,4)[match(V(gf)$name, lh$dolphin_id)]
 V(gf)$size<-max(as.numeric(V(gf)$age))-as.numeric(V(gf)$age)
+V(gf)$shape<-ifelse(V(gf)$sex=="MALE", "square", "circle")
 
-set.seed(3) #not sure if this controls fr algorithm but give it a whirl
+minC <- rep(-Inf, vcount(gf))
+maxC <- rep(Inf, vcount(gf))
+minC[which(V(gf)$name==female)]<-maxC[which(V(gf)$name==female)]<-0
+female_layout <- layout_with_fr(gf, minx=minC, maxx=maxC,
+                              miny=minC, maxy=maxC)
 
-windows()
-# pdf(file="../networks.pdf")
-layout(matrix(c(rep(1, 6), rep(2, 4)), ncol=2, byrow = TRUE))
-par(mar=c(1,1,1,1))
+# windows()
+pdf(file="networks20190125.pdf", width=7, height=4.33)
+
+par(mar=c(0,0,0,0), mfrow=c(1,2))
+
 plot(g,
-     vertex.size=degree(g)+3, 
-     vertex.color=adjustcolor(V(g)$color,alpha.f=0.7),
-     edge.width = edge_attr(g)$weight*10,
+     vertex.size=((degree(g)/max(degree(g)))+0.25)*100, 
+     vertex.color=adjustcolor(V(g)$color,alpha.f=1),
+     vertex.shapes=V(g)$shape,
+     edge.width = edge_attr(g)$weight*12,
      edge.curved = rep(-.2,length(edge_attr(g)$weight)),
      edge.arrow.size = 0, 
      vertex.label = NA,
      edge.color = adjustcolor("black", alpha.f = 0.4), 
-     layout=layout_with_fr(g)
+     layout=male_layout, 
+     rescale=FALSE,
+     xlim=c(-9,9), 
+     ylim=c(-10,10)
      )
-text(x=-1.6, y=0.9, "a", cex=2)
+text(x=-6, y=8, "a", cex=1.5)
 
 plot(gf,
-     vertex.size=degree(gf)+3, 
-     vertex.color=adjustcolor(V(gf)$color,alpha.f=0.7),
-     edge.width = edge_attr(gf)$weight*10,
+     vertex.size=((degree(gf)/max(degree(gf)))+0.25)*100, 
+     vertex.color=adjustcolor(V(gf)$color,alpha.f=1),
+     vertex.shapes=V(gf)$shape,
+     edge.width = edge_attr(gf)$weight*12,
      edge.curved = rep(-.2,length(edge_attr(gf)$weight)),
      edge.arrow.size = 0, 
      vertex.label = NA,
      edge.color = adjustcolor("black", alpha.f = 0.4), 
-     layout=layout_with_fr(gf)
+     layout=female_layout, 
+     rescale=FALSE,
+     xlim=c(-9,9), 
+     ylim=c(-10,10)
      )
-text(x=-2.5, y=1, "b", cex=2)
+text(x=-6, y=8, "b", cex=1.5)
+
 dev.off()
-
-
