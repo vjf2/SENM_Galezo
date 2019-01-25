@@ -1,7 +1,7 @@
 #SENM for Ali Galezo
 #Created February 18, 2018
 #Vivienne Foroughirad
-#Modified May 16, 2018
+#Modified January 25, 2019
 
 library(adehabitatHR)
 library(rgdal)
@@ -309,12 +309,6 @@ mean_group_size<-mean(table(xydata3$observation_id))
 
 #Group dolphins together using hclust clustering to get same average group size in real data
 
-#Add date column back to sim surveys
-
-#load("1000juvs.RData")
-
-#Calculate number of dolphins seen each day and number of groups
-
 groupperday<-table(xydata3$Date[!duplicated(xydata3$observation_id)])
 
 sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) {
@@ -323,6 +317,10 @@ sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) {
 
 kfinal<-group_assign(data=sim_surveys[1:10], id="id", xcoord ="x", ycoord="y",
                      time = names(groupperday),group_vector=groupperday, method="hclust")
+
+save(kfinal, file="kfinal1000.RData")
+
+rm(sim_surveys)
 
 random_group_sizes<-lapply(kfinal, function(x) mean(table(x$observation_id)))
 
@@ -450,9 +448,6 @@ write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
 #Repeat for the results of the random model
 
-#still need to convert ids to character
-# kfinal<-lapply(kfinal, function(x) {x[,"id"]<-as.character(x[,"id"]);x})
-
 library(foreach)
 library(doParallel)
 
@@ -549,7 +544,7 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
 stopCluster(cl)
 endtime<-Sys.time()
 
-endtime-starttime #check run time
+endtime-starttime #check run time (4.4 hours on last run)
 
 all_random_metrics<-do.call("rbind", random_network_metrics)
 
@@ -557,5 +552,5 @@ write.csv(all_random_metrics, "all_random_metrics.csv", row.names = FALSE)
 
 ####See Figure Plotting for figures and aggregating results
 
-save(kfinal, file="kfinal1000.RData")
+
 
