@@ -266,8 +266,7 @@ gridrad<-udsgdf@grid@cellsize[1]/2
 #7 threads - 1000 sims in 8 hours
 
 cl<-makeCluster(detectCores()-1)
-clusterEvalQ(cl, library(sp))
-clusterEvalQ(cl, library(SocGen))
+clusterEvalQ(cl, {library(sp);library(SocGen)})
 clusterExport(cl, c("d", "buff_days", "udsgdf", "schedule", "num_sim", "numdol", "gridrad"))
 
 starttime<-Sys.time()
@@ -502,6 +501,8 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
                               mask=ego_mask)
     
     if(!is.matrix(network_ego)){next}
+    
+    network_ego[is.nan(network_ego)]<-0
     
     g<-graph.adjacency(network_ego, mode="undirected", weighted=TRUE, diag=FALSE)
     
