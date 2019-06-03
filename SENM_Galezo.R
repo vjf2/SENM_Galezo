@@ -381,6 +381,11 @@ save(real_ai_egos, file="real_ai_egos.RData")
 
 library(igraph)
 
+#Read in genomic and matrilineal relatedness data files
+
+relatedness<-read.csv("max_likelihood_relatedness.csv")
+kindat_pos<-read.csv("kindat_pos.csv")
+
 #Calculate network metrics for the real data
 
 nj<-length(real_ai_egos)
@@ -390,9 +395,15 @@ network_metrics<-data.frame(ego=character(nj),
                             mixdegree=numeric(nj),
                             mixcc=numeric(nj),
                             ss_strength=numeric(nj),
+                            ss_strength_kin=numeric(nj),
+                            ss_strength_kin_prop=numeric(nj),
+                            n_ss_kin=numeric(nj),
                             ss_cc=numeric(nj),
                             ss_degree=numeric(nj),
                             os_strength=numeric(nj),
+                            os_strength_kin=numeric(nj),
+                            os_strength_kin_prop=numeric(nj),
+                            n_os_kin=numeric(nj),
                             os_cc=numeric(nj),
                             os_degree=numeric(nj),
                             sex=character(nj))
@@ -440,6 +451,60 @@ for (i in 1:length(ai_egos)) {
     network_metrics[i, "os_degree"]<-degree(egops, ego)
     network_metrics[i, "os_strength"]<-strength(egops, ego)
     network_metrics[i, "os_cc"]<-transitivity(egops, type="local", vids=ego)
+    
+    #assign relatedness to edges, and an unknown number
+    
+    seq_edges<-as.numeric(E(eg) [ from(ego) ])
+    
+    edges<-sapply(seq_edges, function(x) V(eg)[inc(x)]$name)
+    el<-as.data.frame(t(edges))
+    
+    el<-merge_pairs(el, relatedness[,c("xID1", "ID2", "relatedness")], 
+                    "V1", "V2", "xID1", "ID2", all.x=TRUE, all.y=FALSE)
+    
+    el<-merge_pairs(el, kindat_pos, "V1", "V2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
+    
+    el$relatedness<-ifelse(is.na(el$relatedness), el$matpedR, el$relatedness)
+    
+    #pull out animals with relatedness >= 0.125
+    relatives <- unique(c(el[which(el$relatedness >= 0.125),]$V1, el[which(el$relatedness >= 0.125),]$V2))
+    
+    #same-sex strength, kin only:
+    egsskin<-induced_subgraph(eg, vids=V(eg)$name[which(V(eg)$sex==focal_sex & V(eg)$name %in% relatives)])
+    if(length(V(egsskin)$name) == 0){
+      network_metrics[i, "ss_strength_kin"]<- NA
+      network_metrics[i, "n_ss_kin"]<- 0
+      network_metrics[i, "ss_strength_kin_prop"] <- NA
+    } else {
+      if(degree(egsskin, ego) == 0){
+        network_metrics[i, "ss_strength_kin"]<- NA
+        network_metrics[i, "n_ss_kin"]<- 0
+        network_metrics[i, "ss_strength_kin_prop"] <- NA
+      } else {
+        network_metrics[i, "ss_strength_kin"]<-strength(egsskin, ego)
+        network_metrics[i, "n_ss_kin"]<-degree(egsskin, ego)
+        network_metrics[i, "ss_strength_kin_prop"] <- network_metrics[i, "ss_strength_kin"] / network_metrics[i, "ss_strength"]
+      }
+    }
+    
+    #opposite-sex strength, kin only:
+    egopskin<-induced_subgraph(eg, vids=V(eg)$name %in% opposite_sex_names[opposite_sex_names %in% relatives])
+    if(length(V(egopskin)$name) == 0){
+      network_metrics[i, "os_strength_kin"]<- NA
+      network_metrics[i, "n_os_kin"]<- 0
+      network_metrics[i, "os_strength_kin_prop"] <- NA
+    } else {
+      if(degree(egopskin, ego) == 0){
+        network_metrics[i, "os_strength_kin"]<- NA
+        network_metrics[i, "n_os_kin"]<- 0
+        network_metrics[i, "os_strength_kin_prop"] <- NA
+      } else {
+        network_metrics[i, "os_strength_kin"]<-strength(egopskin, ego)
+        network_metrics[i, "n_os_kin"]<-degree(egopskin, ego)
+        network_metrics[i, "os_strength_kin_prop"] <- network_metrics[i, "os_strength_kin"] / network_metrics[i, "os_strength"]
+      }
+    }
+
   }
 }
 
