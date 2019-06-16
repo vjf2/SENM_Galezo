@@ -18,7 +18,7 @@ library(SocGen)
 
 options(stringsAsFactors = FALSE)
 
-all_surveys<-read.csv("clean_all_surveys.csv")
+all_surveys<-read.csv("Raw_input_files/clean_all_surveys.csv")
 
 #read and format life history data
 
