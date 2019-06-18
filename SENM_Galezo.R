@@ -395,15 +395,15 @@ network_metrics<-data.frame(ego=character(nj),
                             mixdegree=numeric(nj),
                             mixcc=numeric(nj),
                             ss_strength=numeric(nj),
-                            ss_strength_kin=numeric(nj),
-                            ss_strength_kin_prop=numeric(nj),
-                            n_ss_kin=numeric(nj),
                             ss_cc=numeric(nj),
                             ss_degree=numeric(nj),
                             os_strength=numeric(nj),
                             os_strength_kin=numeric(nj),
                             os_strength_kin_prop=numeric(nj),
                             n_os_kin=numeric(nj),
+                            os_strength_nonkin=numeric(nj),
+                            os_strength_nonkin_prop=numeric(nj),
+                            n_os_nonkin=numeric(nj),
                             os_cc=numeric(nj),
                             os_degree=numeric(nj),
                             sex=character(nj))
@@ -469,24 +469,6 @@ for (i in 1:length(ai_egos)) {
     #pull out animals with relatedness >= 0.125
     relatives <- unique(c(el[which(el$relatedness >= 0.125),]$V1, el[which(el$relatedness >= 0.125),]$V2))
     
-    #same-sex strength, kin only:
-    egsskin<-induced_subgraph(eg, vids=V(eg)$name[which(V(eg)$sex==focal_sex & V(eg)$name %in% relatives)])
-    if(length(V(egsskin)$name) == 0){
-      network_metrics[i, "ss_strength_kin"]<- NA
-      network_metrics[i, "n_ss_kin"]<- 0
-      network_metrics[i, "ss_strength_kin_prop"] <- NA
-    } else {
-      if(degree(egsskin, ego) == 0){
-        network_metrics[i, "ss_strength_kin"]<- NA
-        network_metrics[i, "n_ss_kin"]<- 0
-        network_metrics[i, "ss_strength_kin_prop"] <- NA
-      } else {
-        network_metrics[i, "ss_strength_kin"]<-strength(egsskin, ego)
-        network_metrics[i, "n_ss_kin"]<-degree(egsskin, ego)
-        network_metrics[i, "ss_strength_kin_prop"] <- network_metrics[i, "ss_strength_kin"] / network_metrics[i, "ss_strength"]
-      }
-    }
-    
     #opposite-sex strength, kin only:
     egopskin<-induced_subgraph(eg, vids=V(eg)$name %in% opposite_sex_names[opposite_sex_names %in% relatives])
     if(length(V(egopskin)$name) == 0){
@@ -504,13 +486,35 @@ for (i in 1:length(ai_egos)) {
         network_metrics[i, "os_strength_kin_prop"] <- network_metrics[i, "os_strength_kin"] / network_metrics[i, "os_strength"]
       }
     }
-
+    
+    #opposite-sex strength, non-kin only:
+    egopsnonkin<-induced_subgraph(eg, vids=V(eg)$name %in% c(ego, opposite_sex_names[!opposite_sex_names %in% relatives]))
+    if(length(V(egopsnonkin)$name) == 0){
+      network_metrics[i, "os_strength_nonkin"]<- NA
+      network_metrics[i, "n_os_nonkin"]<- 0
+      network_metrics[i, "os_strength_nonkin_prop"] <- NA
+    } else {
+      if(degree(egopsnonkin, ego) == 0){
+        network_metrics[i, "os_strength_nonkin"]<- NA
+        network_metrics[i, "n_os_nonkin"]<- 0
+        network_metrics[i, "os_strength_nonkin_prop"] <- NA
+      } else {
+        network_metrics[i, "os_strength_nonkin"]<-strength(egopsnonkin, ego)
+        network_metrics[i, "n_os_nonkin"]<-degree(egopsnonkin, ego)
+        network_metrics[i, "os_strength_nonkin_prop"] <- network_metrics[i, "os_strength_nonkin"] / network_metrics[i, "os_strength"]
+      }
+    }
   }
 }
 
 write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
 #Repeat for the results of the random model
+
+# if loading kfinal from .Rdata file:
+# for (i in 1:length(kfinal)){
+#   kfinal[[i]]$Date <- as.Date(kfinal[[i]]$Date, origin = "1960-10-01")
+# }
 
 library(foreach)
 library(doParallel)
@@ -544,6 +548,12 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
                               ss_cc=numeric(num_sim),
                               ss_degree=numeric(num_sim),
                               os_strength=numeric(num_sim),
+                              os_strength_kin=numeric(num_sim),
+                              os_strength_kin_prop=numeric(num_sim),
+                              n_os_kin=numeric(num_sim),
+                              os_strength_nonkin=numeric(num_sim),
+                              os_strength_nonkin_prop=numeric(num_sim),
+                              n_os_nonkin=numeric(num_sim),
                               os_cc=numeric(num_sim),
                               os_degree=numeric(num_sim),
                               sex=rep(ego_sex, num_sim),
@@ -554,14 +564,23 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
     random1<-kfinal[[j]]
     ego_network<-random1[which(date_lookup>=start & date_lookup<=end),]
     ego_network$dates<-date_lookup[which(date_lookup>=start & date_lookup<=end)]
-    eid<-unique(ego_network$group[which(ego_network$id==ego)])
-    dolls<-unique(ego_network$id[which(ego_network$group %in% eid)])
-    ego_network<-ego_network[which(ego_network$id %in% dolls),]
+    #eid<-unique(ego_network$group[which(ego_network$id==ego)])
+    eid<-unique(ego_network$DayGroup[which(ego_network$dolphin_id==ego)])
+    #dolls<-unique(ego_network$id[which(ego_network$group %in% eid)])
+    dolls<-unique(ego_network$dolphin_id[which(ego_network$DayGroup %in% eid)])
+    #ego_network<-ego_network[which(ego_network$id %in% dolls),]
+    ego_network<-ego_network[which(ego_network$dolphin_id %in% dolls),]
     
+    # network_ego<-simple_ratio(sightings=ego_network,
+    #                           group_variable="group", 
+    #                           dates="dates", 
+    #                           IDs="id", 
+    #                           symmetric=TRUE, 
+    #                           mask=ego_mask)
     network_ego<-simple_ratio(sightings=ego_network,
-                              group_variable="group", 
+                              group_variable="DayGroup", 
                               dates="dates", 
-                              IDs="id", 
+                              IDs="dolphin_id", 
                               symmetric=TRUE, 
                               mask=ego_mask)
     
@@ -600,6 +619,59 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
       network_metrics[j, "os_strength"]<-strength(egops, ego)
       network_metrics[j, "os_cc"]<-transitivity(egops, type="local", vids=ego)
       # ego_sims[[j]]<-network_ego
+      
+      #assign relatedness to edges, and an unknown number
+      
+      seq_edges<-as.numeric(E(eg) [ from(ego) ])
+      
+      edges<-sapply(seq_edges, function(x) V(eg)[inc(x)]$name)
+      el<-as.data.frame(t(edges))
+      
+      el<-merge_pairs(el, relatedness[,c("xID1", "ID2", "relatedness")], 
+                      "V1", "V2", "xID1", "ID2", all.x=TRUE, all.y=FALSE)
+      
+      el<-merge_pairs(el, kindat_pos, "V1", "V2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
+      
+      el$relatedness<-ifelse(is.na(el$relatedness), el$matpedR, el$relatedness)
+      
+      #pull out animals with relatedness >= 0.125
+      relatives <- unique(c(el[which(el$relatedness >= 0.125),]$V1, el[which(el$relatedness >= 0.125),]$V2))
+      
+      #opposite-sex strength, kin only:
+      egopskin<-induced_subgraph(eg, vids=V(eg)$name %in% opposite_sex_names[opposite_sex_names %in% relatives])
+      if(length(V(egsskin)$name) == 0){
+        network_metrics[j, "os_strength_kin"]<- NA
+        network_metrics[j, "n_os_kin"]<- 0
+        network_metrics[j, "os_strength_kin_prop"] <- NA
+      } else {
+        if(degree(egopskin, ego) == 0){
+          network_metrics[j, "os_strength_kin"]<- NA
+          network_metrics[j, "n_os_kin"]<- 0
+          network_metrics[j, "os_strength_kin_prop"] <- NA
+        } else {
+          network_metrics[j, "os_strength_kin"]<-strength(egopskin, ego)
+          network_metrics[j, "n_os_kin"]<-degree(egopskin, ego)
+          network_metrics[j, "os_strength_kin_prop"] <- network_metrics[j, "os_strength_kin"] / network_metrics[j, "os_strength"]
+        }
+      }
+      
+      #opposite-sex strength, non-kin only:
+      egopsnonkin<-induced_subgraph(eg, vids=V(eg)$name %in% c(ego, opposite_sex_names[!opposite_sex_names %in% relatives]))
+      if(length(V(egopsnonkin)$name) == 0){
+        network_metrics[j, "os_strength_nonkin"]<- NA
+        network_metrics[j, "n_os_nonkin"]<- 0
+        network_metrics[j, "os_strength_nonkin_prop"] <- NA
+      } else {
+        if(degree(egopsnonkin, ego) == 0){
+          network_metrics[j, "os_strength_nonkin"]<- NA
+          network_metrics[j, "n_os_nonkin"]<- 0
+          network_metrics[j, "os_strength_nonkin_prop"] <- NA
+        } else {
+          network_metrics[j, "os_strength_nonkin"]<-strength(egopsnonkin, ego)
+          network_metrics[j, "n_os_nonkin"]<-degree(egopsnonkin, ego)
+          network_metrics[j, "os_strength_nonkin_prop"] <- network_metrics[j, "os_strength_nonkin"] / network_metrics[j, "os_strength"]
+        }
+      }
     }
     
   }
@@ -617,6 +689,3 @@ all_random_metrics<-do.call("rbind", random_network_metrics)
 write.csv(all_random_metrics, "all_random_metrics.csv", row.names = FALSE)
 
 ####See Figure Plotting for figures and aggregating results
-
-
-
