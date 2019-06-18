@@ -70,8 +70,8 @@ colnames(xydata3)<-c("Date", "observation_id", "dolphin_id","X","Y")
 #create a grid on which to model animal home ranges
 grid_buffer=5000
 
-x <- seq(min(xydata3[,"X"])-grid_buffer,max(xydata3[,"X"])+grid_buffer,by=100) # where resolution is the pixel size you desire. 100 is the smallest i would go, if you make it larger you'll get coarser resolution, but faster runtimes
-y <- seq(min(xydata3[,"Y"])-grid_buffer,max(xydata3[,"Y"])+grid_buffer,by=100)
+x <- seq(min(xydata3[,"X"])-grid_buffer,max(xydata3[,"X"])+grid_buffer,by=250) # where resolution is the pixel size you desire. 100 is the smallest i would go, if you make it larger you'll get coarser resolution, but faster runtimes
+y <- seq(min(xydata3[,"Y"])-grid_buffer,max(xydata3[,"Y"])+grid_buffer,by=250)
 
 xy <- expand.grid(x=x,y=y)
 coordinates(xy) <- ~x+y
@@ -131,7 +131,7 @@ uddf<-unlist(optud)
 class(uddf)<-"estUDm"
 
 #read in a polygon on shark bay to do a fine scale trimming of the UDs
-coast_polygon<-readOGR("coastpolygon", "coastpolygon")
+coast_polygon<-readOGR("Raw_input_files/coastpolygon", "coastpolygon")
 
 coast_polygon<-spTransform(coast_polygon, CRS("+proj=tmerc +lat_0=-25 +lon_0=113 +k=0.99999 +x_0=50000 +y_0=100000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"))
 
@@ -314,14 +314,17 @@ sim_surveys<-lapply(sim_surveys, function(i) lapply(1:length(i), function(q) {
   names(i[[q]])<-c("y", "x", "id")
   return(i[[q]])}))
 
-kfinal<-group_assign(data=sim_surveys[1:10], id="id", xcoord ="x", ycoord="y",
-                     time = names(groupperday),group_vector=groupperday, method="hclust")
+###change from 10 to 1000 for implementation
+
+kfinal<-group_assign(data=sim_surveys, id="id", xcoord ="x", ycoord="y",
+                     time = names(groupperday),group_vector=groupperday, 
+                     method="hclust")
 
 save(kfinal, file="kfinal1000.RData")
 
 rm(sim_surveys)
 
-random_group_sizes<-lapply(kfinal, function(x) mean(table(x$observation_id)))
+# random_group_sizes<-lapply(kfinal, function(x) mean(table(x$observation_id)))
 
 #Create a table of availability dates for focals
 
@@ -383,8 +386,8 @@ library(igraph)
 
 #Read in genomic and matrilineal relatedness data files
 
-relatedness<-read.csv("max_likelihood_relatedness.csv")
-kindat_pos<-read.csv("kindat_pos.csv")
+relatedness<-read.csv("Raw_input_files/max_likelihood_relatedness.csv")
+kindat_pos<-read.csv("Raw_input_files/kindat_pos.csv")
 
 #Calculate network metrics for the real data
 
