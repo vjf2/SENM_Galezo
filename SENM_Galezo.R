@@ -2,7 +2,7 @@
 #Created February 18, 2018
 #Vivienne Foroughirad
 #Modified January 25, 2019
-#Modified June 18, 2019
+#Modified August 21, 2019
 
 library(adehabitatHR)
 library(rgdal)
@@ -523,6 +523,8 @@ write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
 #Repeat for the results of the random model
 
+# load("kfinal1000.RData")
+
 library(foreach)
 library(doParallel)
 
@@ -684,6 +686,8 @@ endtime<-Sys.time()
 endtime-starttime #check run time (9.8 hours on last run)
 
 all_random_metrics<-do.call("rbind", random_network_metrics)
+
+all_random_metrics$sex<-life_history_lookup$sex[match(all_random_metrics$ego, life_history_lookup$dolphin_id)]
 
 write.csv(all_random_metrics, "all_random_metrics.csv", row.names = FALSE)
 
