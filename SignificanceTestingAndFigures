@@ -12,9 +12,9 @@ library(gridExtra)
 options(stringsAsFactors = FALSE)
 num_sim <- 1000
 
-## Load files.
-observed <- read.csv("real_network_metrics_full.csv")
-expected <- read.csv("all_random_metrics_full.csv")
+## Download files.
+observed <- read.csv("real_network_metrics20190125.csv")
+expected <- read.csv("all_random_metrics20190130.csv")
 dolphins <- unique(observed$ego)
 
 
@@ -35,14 +35,14 @@ observed %>%
 ## Observed vs. expected social network metrics
 ########################################################################
 
-metrics <- c("mixdegree","ss_degree","os_degree","mixstrength","ss_strength","os_strength","os_strength_kin","os_strength_nonkin","mixcc","percent_close_kin")
+metrics <- c("mixdegree","ss_degree","os_degree","mixstrength","ss_strength","os_strength","mixcc")
 
 pVals <- data.frame(metric = rep(metrics, each = 2),
                     sex = rep(c("FEMALE","MALE"), length(metrics)))
 
-#bonferroni <- nrow(pVals)
+bonferroni <- nrow(pVals)
 
-sigTester <- function(metric, sex){
+sigTester <- function(metric, sex, bonferroni){
   # This function calculates the p-value according to the rule P = (b + 1)/(m + 1),
   # Where b = number times a permuted value is more extreme than the observed value, and m = number of permutations.
   sex_ <- sex
@@ -61,15 +61,15 @@ sigTester <- function(metric, sex){
   extreme <- ifelse(observed_val >= median(expected_vals),
                     sum(expected_vals > observed_val),
                     sum(observed_val > expected_vals))
-  (extreme + 1) / (num_sim + 1)
+  (extreme + 1) / (num_sim + 1) * bonferroni
 }
 
-pVals$p <- mapply(sigTester,
-                  metric = pVals$metric,
-                  sex = pVals$sex)
-pVals$adjusted_p <- p.adjust(pVals$p, "bonferroni")
+pVals$corrected_p <- mapply(sigTester,
+                            metric = pVals$metric,
+                            sex = pVals$sex,
+                            bonferroni = bonferroni)
 
-#pVals$adjusted_p <- round(pVals$adjusted_p, 4)
+pVals$corrected_p <- round(pVals$corrected_p, 4)
 
 # P-values greater than 1 can occur as a result of Bonferroni corrections.
 
@@ -80,15 +80,13 @@ pVals$adjusted_p <- p.adjust(pVals$p, "bonferroni")
 ## Titles
 titles <- data.frame(short = metrics,
                      long = c("Number of Associates", "Number of Same-Sex Associates", "Number of Opposite-Sex Associates",
-                              "Association Strength", "Same-Sex Strength", "Opposite-Sex Strength", "Opposite-Sex Strength (kin only)", "Opposite-Sex Strength (nonkin only)",
-                              "Clustering Coefficient","Proportion of Available Close Kin\nAssociated With"))
+                              "Strength", "Same-Sex Strength", "Opposite-Sex Strength", "Clustering Coefficient"))
 
 ## Axes
 axes <- list(ss_degree = list(breaks_x = c(9,12,15,18,21), limits_x = c(8, 22)),
              os_degree = list(breaks_x = c(7,10,13,16,19), limits_x = c(6.9, 19.5)),
              mixstrength = list(breaks_x = seq(0.5, 1.5, 0.25), limits_x = c(0.5,1.5)),
-             mixcc = list(breaks_x = seq(0.25,0.45,0.05), limits_x = c(0.23,0.45)),
-             percent_close_kin = list(breaks_x = seq(0,0.7,0.2), limits_x = c(-0.05,0.7))
+             mixcc = list(breaks_x = seq(0.25,0.45,0.05), limits_x = c(0.23,0.45))
 )
 
 ## Function to generate plots
@@ -152,11 +150,6 @@ ggpubr::ggarrange(SENMplot("mixcc", "FEMALE"),
                   SENMplot("mixcc", "MALE"),
                   ncol = 2, nrow = 1, common.legend = TRUE, legend = "bottom")
 
-## Percent close kin associated with
-ggpubr::ggarrange(SENMplot("percent_close_kin", "FEMALE"),
-                  SENMplot("percent_close_kin", "MALE"),
-                  ncol = 2, nrow = 1, common.legend = TRUE, legend = "bottom")
-
 
 ########################################################################
 ## Compare 1) strength of same-sex bonds and 2) clustering coefficients in males vs. females
@@ -197,3 +190,20 @@ degrees <- data.frame(id = as.factor(rep(observed$ego, 2)),
                       class = as.factor(c(rep("opposite", nrow(observed)), rep("same", nrow(observed)))),
                       degree = c(observed$os_degree, observed$ss_degree))
 coin::symmetry_test(degree ~ class | id, data = degrees, alternative = "less")
+
+########################################################################
+## Temporary figure: kin strength
+########################################################################
+
+observed %>%
+  select(ego, sex, ss_strength_kin_prop, os_strength_kin_prop) %>%
+  melt(., id.vars = c("ego","sex")) %>%
+  ggplot(aes(x = variable, y = value, fill = sex)) +
+  geom_boxplot() +
+  #scale_fill_discrete(values = c("#","#")) +
+  theme_classic() +
+  ylab("proportion comprised of close kin (r \u2265 0.125)") +
+  xlab("") +
+  scale_x_discrete(labels = c("same-sex strength","opposite-sex strength")) +
+  scale_y_continuous(limits = c(0,0.7), breaks = seq(0, 0.6, 0.2), expand = c(0,0)) +
+  theme(axis.text=element_text(size=10))
