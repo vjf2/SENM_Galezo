@@ -521,6 +521,8 @@ for (i in 1:length(ai_egos)) {
 
 write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
+real_network_metrics <- network_metrics
+
 #Repeat for the results of the random model
 
 # load("kfinal1000.RData")
@@ -689,6 +691,51 @@ all_random_metrics<-do.call("rbind", random_network_metrics)
 
 all_random_metrics$sex<-life_history_lookup$sex[match(all_random_metrics$ego, life_history_lookup$dolphin_id)]
 
-write.csv(all_random_metrics, "all_random_metrics.csv", row.names = FALSE)
+#Add in overall kin availability data
+
+focals<-availability_ego[,"dolphin_id"]
+alters<-availability_alter[,"dolphin_id"]
+
+rlookup<-data.frame(Var1=rep(focals, each=length(alters)), Var2=rep(alters, length(focals)))
+
+rlookup[,2]<-ifelse(rlookup[,1]==rlookup[,2], NA, rlookup[,2])
+rlookup<-rlookup[complete.cases(rlookup),]
+
+rlookup$start<-availability_ego$entry[match(rlookup[,1],availability_ego$dolphin_id)]
+rlookup$end<-availability_ego$depart[match(rlookup[,1],availability_ego$dolphin_id)]
+rlookup$start2<-availability_alter$entry[match(rlookup[,2],availability_alter$dolphin_id)]
+rlookup$end2<-availability_alter$depart[match(rlookup[,2],availability_alter$dolphin_id)]
+rlookup$hstart<-as.Date(with(rlookup, ifelse(start>start2, start, start2)),origin="1970-01-01")
+rlookup$hend<-as.Date(with(rlookup, ifelse(end<end2, end, end2)),origin="1970-01-01")
+rlookup$tp<-with(rlookup, hend-hstart)
+
+rlookup_run<-rlookup[which(rlookup$tp>1),]
+
+#Add kinship data to list of all possible pairs
+
+akin<-merge_pairs(rlookup_run[,c("Var1", "Var2", "tp")], comb_rel[,c("ID1", "ID2", "kin_status")], "Var1", "Var2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
+
+dolphs<-split(akin, akin$Var1)
+
+available_close_kin<-unlist(lapply(dolphs, function (x) length(na.omit(x$kin_status[x$kin_status=="kin"]))))
+
+available_non_kin<-unlist(lapply(dolphs, function (x) length(na.omit(x$kin_status[x$kin_status=="non_kin"]))))
+
+available_unknown<-unlist(lapply(dolphs, function (x) length(na.omit(x$kin_status[x$kin_status=="unknown"]))))
+
+#Add available kin to real data
+
+real_network_metrics$available_kin<-available_close_kin[match(real_network_metrics$ego, names(available_close_kin))]
+
+real_network_metrics$percent_close_kin<-(real_network_metrics$ss_degree_kin+real_network_metrics$os_degree_kin)/real_network_metrics$available_kin
+
+#Add available kin to random data as well 
+
+all_random_metrics$available_kin<-real_network_metrics$available_kin[match(all_random_metrics$ego, real_network_metrics$ego)]
+
+all_random_metrics$percent_close_kin<-(all_random_metrics$ss_degree_kin+all_random_metrics$os_degree_kin)/all_random_metrics$available_kin
+
+write.csv(real_network_metrics, "real_network_metrics_20190930.csv", row.names = FALSE)
+write.csv(all_random_metrics, "all_random_metrics_20190930.csv", row.names = FALSE)
 
 ####See Figure Plotting for figures and aggregating results
