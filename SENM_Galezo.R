@@ -405,15 +405,20 @@ network_metrics<-data.frame(ego=character(nj),
                             mixdegree=numeric(nj),
                             mixcc=numeric(nj),
                             ss_strength=numeric(nj),
+                            ss_cc=numeric(nj),
                             ss_degree=numeric(nj),
                             os_degree=numeric(nj),
                             os_strength=numeric(nj),
-                            os_strength_nonkin=numeric(nj),
-                            os_strength_kin=numeric(nj),
-                            close_kin=numeric(nj),
-                            known_non_kin=numeric(nj),
-                            available_kin=numeric(nj),
+                            os_cc=numeric(nj),
                             mix_unknown_kin=numeric(nj),
+                            os_strength_kin=numeric(nj),
+                            ss_strength_kin=numeric(nj),
+                            ss_degree_kin=numeric(nj),
+                            os_degree_kin=numeric(nj),
+                            os_strength_nonkin=numeric(nj),
+                            ss_strength_nonkin=numeric(nj),
+                            ss_degree_nonkin=numeric(nj),
+                            os_degree_nonkin=numeric(nj),
                             sex=character(nj))
 
 for (i in 1:length(ai_egos)) {
@@ -434,7 +439,7 @@ for (i in 1:length(ai_egos)) {
   eg<-make_ego_graph(g, order=1, nodes=ego)[[1]] #is a list, return element 1
   
   if(length(E(eg))==0){next} else{
-    
+  
     #add relatedness status of pairs
     #assign relatedness to edges, and an unknown number
     
@@ -443,17 +448,13 @@ for (i in 1:length(ai_egos)) {
     edges<-sapply(seq_edges, function(x) V(eg)[inc(x)]$name)
     el<-as.data.frame(t(edges))
     
-    el<-merge_pairs(el, comb_rel[,c("ID1", "ID2", "kin_status", "relatedness")], 
+    el<-merge_pairs(el, comb_rel[,c("ID1", "ID2", "kin_status")], 
                     "V1", "V2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
     
     network_metrics[i, "mix_unknown_kin"]<-nrow(el[el$kin_status=="unknown",])
-    network_metrics[i, "known_non_kin"]<-nrow(el[el$kin_status=="non_kin",])
-    
-    close_kin<-length(na.omit(el$relatedness[el$relatedness>=0.125]))
-    network_metrics[i,"close_kin"]<-close_kin
     
     eg<-set_edge_attr(eg, "relatedness", index=seq_edges, el$kin_status)
-    
+
     #add sexes of individuals
     
     V(eg)$sex<-life_history_lookup$sex[match(V(eg)$name, life_history_lookup$dolphin_id)]
@@ -467,38 +468,58 @@ for (i in 1:length(ai_egos)) {
     egss<-induced_subgraph(eg, vids=V(eg)$name[which(V(eg)$sex==focal_sex)])
     
     if(length(V(egss))>0){
-      network_metrics[i, "ss_degree"]<-degree(egss, ego)
-      network_metrics[i, "ss_strength"]<-strength(egss, ego)
+    network_metrics[i, "ss_degree"]<-degree(egss, ego)
+    network_metrics[i, "ss_strength"]<-strength(egss, ego)
+    network_metrics[i, "ss_cc"]<-transitivity(egss, type="local", vids=ego)
+    
+    #same sex kin degree and strength
+      
+      egsskin<-subgraph.edges(egss, eids=E(egss)[which(E(egss)$relatedness=="kin")])
+      
+      if(length(V(egsskin))>0){
+      network_metrics[i, "ss_degree_kin"]<-degree(egsskin, ego)
+      network_metrics[i, "ss_strength_kin"]<-strength(egsskin, ego)
+      }
+      #same sex nonkin degree and strength
+      
+      egssnonkin<-subgraph.edges(egss, eids=E(egss)[which(E(egss)$relatedness=="non_kin")])
+      
+      if(length(V(egssnonkin))>0){
+      network_metrics[i, "ss_degree_nonkin"]<-degree(egssnonkin, ego)
+      network_metrics[i, "ss_strength_nonkin"]<-strength(egssnonkin, ego)
+      }
     }
-    
     #pull out just opposite sex (and ego)
-    
+      
     opposite_sex_names <- c(ego, V(eg)$name[which(V(eg)$sex!=focal_sex)])
     egops<-induced_subgraph(eg, vids=V(eg)$name %in% c(opposite_sex_names, ego))
     
     if(length(V(egops))>0){
-      network_metrics[i, "os_degree"]<-degree(egops, ego)
-      network_metrics[i, "os_strength"]<-strength(egops, ego)
-      
-      #opposite sex kin degree and strength
-      
+    network_metrics[i, "os_degree"]<-degree(egops, ego)
+    network_metrics[i, "os_strength"]<-strength(egops, ego)
+    network_metrics[i, "os_cc"]<-transitivity(egops, type="local", vids=ego)
+    
+    #opposite sex kin degree and strength
+    
       egopskin<-subgraph.edges(egops, eids=E(egops)[which(E(egops)$relatedness=="kin")])
       
       if(length(V(egopskin))>0){
-        network_metrics[i, "os_strength_kin"]<-strength(egopskin, ego)
+      network_metrics[i, "os_degree_kin"]<-degree(egopskin, ego)
+      network_metrics[i, "os_strength_kin"]<-strength(egopskin, ego)
       }
       #opposite sex nonkin degree and strength
       
       egopsnonkin<-subgraph.edges(egops, eids=E(egops)[which(E(egops)$relatedness=="non_kin")])
       
       if(length(V(egopsnonkin))>0){
-        network_metrics[i, "os_strength_nonkin"]<-strength(egopsnonkin, ego)
+      network_metrics[i, "os_degree_nonkin"]<-degree(egopsnonkin, ego)
+      network_metrics[i, "os_strength_nonkin"]<-strength(egopsnonkin, ego)
       }
-    }
+      }
   }
 }
 
-#write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
+write.csv(network_metrics, "real_network_metrics.csv", row.names = FALSE)
 
 #Repeat for the results of the random model
 
@@ -533,15 +554,20 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
                                       mixdegree=numeric(num_sim),
                                       mixcc=numeric(num_sim),
                                       ss_strength=numeric(num_sim),
+                                      ss_cc=numeric(num_sim),
                                       ss_degree=numeric(num_sim),
                                       os_degree=numeric(num_sim),
                                       os_strength=numeric(num_sim),
+                                      os_cc=numeric(num_sim),
                                       mix_unknown_kin=numeric(num_sim),
                                       os_strength_kin=numeric(num_sim),
+                                      ss_strength_kin=numeric(num_sim),
+                                      ss_degree_kin=numeric(num_sim),
+                                      os_degree_kin=numeric(num_sim),
                                       os_strength_nonkin=numeric(num_sim),
-                                      close_kin=numeric(num_sim),
-                                      known_non_kin=numeric(num_sim),
-                                      available_kin=numeric(num_sim),
+                                      ss_strength_nonkin=numeric(num_sim),
+                                      ss_degree_nonkin=numeric(num_sim),
+                                      os_degree_nonkin=numeric(num_sim),
                                       sex=character(num_sim),
                                       iteration=1:num_sim)
   
@@ -579,14 +605,10 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
       edges<-sapply(seq_edges, function(x) V(eg)[inc(x)]$name)
       el<-as.data.frame(t(edges))
       
-      el<-merge_pairs(el, comb_rel[,c("ID1", "ID2", "kin_status", "relatedness")], 
+      el<-merge_pairs(el, comb_rel[,c("ID1", "ID2", "kin_status")], 
                       "V1", "V2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
       
       network_metrics[j, "mix_unknown_kin"]<-nrow(el[el$kin_status=="unknown",])
-      network_metrics[j, "known_non_kin"]<-nrow(el[el$kin_status=="non_kin",])
-      
-      close_kin<-length(na.omit(el$relatedness[el$relatedness>=0.125]))
-      network_metrics[j,"close_kin"]<-close_kin
       
       eg<-set_edge_attr(eg, "relatedness", index=seq_edges, el$kin_status)
       
@@ -605,8 +627,25 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
       if(length(V(egss))>0){
         network_metrics[j, "ss_degree"]<-degree(egss, ego)
         network_metrics[j, "ss_strength"]<-strength(egss, ego)
+        network_metrics[j, "ss_cc"]<-transitivity(egss, type="local", vids=ego)
+        
+        #same sex kin degree and strength
+        
+        egsskin<-subgraph.edges(egss, eids=E(egss)[which(E(egss)$relatedness=="kin")])
+        
+        if(length(V(egsskin))>0){
+          network_metrics[j, "ss_degree_kin"]<-degree(egsskin, ego)
+          network_metrics[j, "ss_strength_kin"]<-strength(egsskin, ego)
+        }
+        #same sex nonkin degree and strength
+        
+        egssnonkin<-subgraph.edges(egss, eids=E(egss)[which(E(egss)$relatedness=="non_kin")])
+        
+        if(length(V(egssnonkin))>0){
+          network_metrics[j, "ss_degree_nonkin"]<-degree(egssnonkin, ego)
+          network_metrics[j, "ss_strength_nonkin"]<-strength(egssnonkin, ego)
+        }
       }
-      
       #pull out just opposite sex (and ego)
       
       opposite_sex_names <- c(ego, V(eg)$name[which(V(eg)$sex!=focal_sex)])
@@ -615,12 +654,14 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
       if(length(V(egops))>0){
         network_metrics[j, "os_degree"]<-degree(egops, ego)
         network_metrics[j, "os_strength"]<-strength(egops, ego)
+        network_metrics[j, "os_cc"]<-transitivity(egops, type="local", vids=ego)
         
         #opposite sex kin degree and strength
         
         egopskin<-subgraph.edges(egops, eids=E(egops)[which(E(egops)$relatedness=="kin")])
         
         if(length(V(egopskin))>0){
+          network_metrics[j, "os_degree_kin"]<-degree(egopskin, ego)
           network_metrics[j, "os_strength_kin"]<-strength(egopskin, ego)
         }
         #opposite sex nonkin degree and strength
@@ -628,6 +669,7 @@ random_network_metrics<-foreach (n=1:nrow(availability_ego), .errorhandling='pas
         egopsnonkin<-subgraph.edges(egops, eids=E(egops)[which(E(egops)$relatedness=="non_kin")])
         
         if(length(V(egopsnonkin))>0){
+          network_metrics[j, "os_degree_nonkin"]<-degree(egopsnonkin, ego)
           network_metrics[j, "os_strength_nonkin"]<-strength(egopsnonkin, ego)
         }
       }
@@ -648,58 +690,5 @@ all_random_metrics<-do.call("rbind", random_network_metrics)
 all_random_metrics$sex<-life_history_lookup$sex[match(all_random_metrics$ego, life_history_lookup$dolphin_id)]
 
 write.csv(all_random_metrics, "all_random_metrics.csv", row.names = FALSE)
-
-#Calculate available kin in population, available non-kin, and available individuals of unknown relatedness
-
-focals<-availability_ego[,"dolphin_id"]
-alters<-availability_alter[,"dolphin_id"]
-
-rlookup<-data.frame(Var1=rep(focals, each=length(alters)), Var2=rep(alters, length(focals)))
-
-rlookup[,2]<-ifelse(rlookup[,1]==rlookup[,2], NA, rlookup[,2])
-rlookup<-rlookup[complete.cases(rlookup),]
-
-rlookup$start<-availability_ego$entry[match(rlookup[,1],availability_ego$dolphin_id)]
-rlookup$end<-availability_ego$depart[match(rlookup[,1],availability_ego$dolphin_id)]
-rlookup$start2<-availability_alter$entry[match(rlookup[,2],availability_alter$dolphin_id)]
-rlookup$end2<-availability_alter$depart[match(rlookup[,2],availability_alter$dolphin_id)]
-rlookup$hstart<-as.Date(with(rlookup, ifelse(start>start2, start, start2)),origin="1970-01-01")
-rlookup$hend<-as.Date(with(rlookup, ifelse(end<end2, end, end2)),origin="1970-01-01")
-rlookup$tp<-with(rlookup, hend-hstart)
-
-rlookup_run<-rlookup[which(rlookup$tp>1),]
-
-#Add relatedness data to list of all possible pairs
-
-akin<-merge_pairs(rlookup_run[,c("Var1", "Var2", "tp")], relatedness[,c("xID1", "ID2", "relatedness")], "Var1", "Var2", "xID1", "ID2", all.x=TRUE, all.y=FALSE)
-
-akin<-merge_pairs(akin, kindat_pos, "Var1", "Var2", "ID1", "ID2", all.x=TRUE, all.y=FALSE)
-
-akin$relatedness<-ifelse(is.na(akin$relatedness), akin$matpedR, akin$relatedness)
-
-dolphs<-split(akin, akin$Var1)
-
-available_close_kin<-unlist(lapply(dolphs, function (x) length(na.omit(x$relatedness[x$relatedness>=0.125]))))
-
-available_non_kin<-unlist(lapply(dolphs, function (x) length(na.omit(x$relatedness[x$relatedness<0.125]))))
-
-available_unknown<-unlist(lapply(dolphs, function (x) length(x$relatedness[is.na(x$relatedness)])))
-
-#Add available kin to real data
-
-network_metrics$available_kin<-available_close_kin[match(network_metrics$ego, names(available_close_kin))]
-
-network_metrics$percent_close_kin<-network_metrics$close_kin/network_metrics$available_kin
-
-#Add available kin to random data as well 
-
-all_random_metrics$available_kin<-network_metrics$available_kin[match(all_random_metrics$ego, network_metrics$ego)]
-
-all_random_metrics$percent_close_kin<-all_random_metrics$close_kin/all_random_metrics$available_kin
-
-#write out updated network files
-
-write.csv(network_metrics, "real_network_metrics_full.csv")
-write.csv(all_random_metrics, "all_random_metrics_full.csv")
 
 ####See Figure Plotting for figures and aggregating results
