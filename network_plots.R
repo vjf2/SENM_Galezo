@@ -12,8 +12,11 @@ lh<-lh[!duplicated(lh$dolphin_id),]
 male<-"AGA" #or try STA
 female<-"SHO" #or try CAB KIY SHO SQL
 
-male_ego<-real_ai_egos[[male]] 
-female_ego<-real_ai_egos[[female]] 
+# male_ego<-real_ai_egos[[male]] 
+# female_ego<-real_ai_egos[[female]] 
+
+male_ego<-as.matrix(read.csv("AGA_globalnetwork.csv", row.names = 1))
+female_ego<-as.matrix(read.csv("SHO_globalnetwork.csv", row.names = 1))
 
 male_ego[is.na(male_ego)]<-0
 female_ego[is.na(female_ego)]<-0
@@ -57,14 +60,14 @@ gall<-graph.adjacency(male_ego, mode="undirected", weighted=TRUE,diag=FALSE)
 gfall<-graph.adjacency(female_ego, mode="undirected", weighted=TRUE,diag=FALSE)
 
 
-gsize<-transitivity(gall, type="local", vids=V(gall)[V(gall)$name %in% V(g)$name])*100
+gsize<-transitivity(gall, type="weighted", vids=V(gall)[V(gall)$name %in% V(g)$name])*100
 gsize[is.na(gsize)]<-1
 
-gfsize<-transitivity(gfall, type="local", vids=V(gfall)[V(gfall)$name %in% V(gf)$name])*100
+gfsize<-transitivity(gfall, type="weighted", vids=V(gfall)[V(gfall)$name %in% V(gf)$name])*100
 
 
 #windows()
-pdf(file="networks20200109_2.pdf", width=7, height=4.33)
+pdf(file="networks20200109.pdf", width=7, height=4.33)
 
 par(mar=c(0,0,0,0), mfrow=c(1,2))
 
